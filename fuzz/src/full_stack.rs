@@ -38,7 +38,7 @@ use bitcoin::secp256k1::Secp256k1;
 use std::cell::RefCell;
 use std::collections::{HashMap, hash_map};
 use std::cmp;
-use std::sync::Arc;
+use std::sync::{Arc,Mutex};
 use std::sync::atomic::{AtomicU64,AtomicUsize,Ordering};
 
 #[inline]
@@ -103,9 +103,13 @@ impl FeeEstimator for FuzzEstimator {
 	}
 }
 
-struct TestBroadcaster {}
+pub struct TestBroadcaster {
+	pub txn_broadcasted: Mutex<Vec<Transaction>>,
+}
 impl BroadcasterInterface for TestBroadcaster {
-	fn broadcast_transaction(&self, _tx: &Transaction) {}
+	fn broadcast_transaction(&self, tx: &Transaction) {
+		self.txn_broadcasted.lock().unwrap().push(tx.clone());
+	}
 }
 
 #[derive(Clone)]
@@ -137,6 +141,7 @@ impl<'a> std::hash::Hash for Peer<'a> {
 struct MoneyLossDetector<'a> {
 	manager: Arc<ChannelManager<EnforcingChannelKeys, Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>, Arc<TestBroadcaster>, Arc<KeyProvider>, Arc<FuzzEstimator>, Arc<dyn Logger>>>,
 	monitor: Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>,
+	broadcaster: Arc<TestBroadcaster>,
 	handler: PeerManager<Peer<'a>, Arc<ChannelManager<EnforcingChannelKeys, Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>, Arc<TestBroadcaster>, Arc<KeyProvider>, Arc<FuzzEstimator>, Arc<dyn Logger>>>, Arc<dyn Logger>>,
 
 	peers: &'a RefCell<[bool; 256]>,
@@ -151,10 +156,12 @@ impl<'a> MoneyLossDetector<'a> {
 	pub fn new(peers: &'a RefCell<[bool; 256]>,
 	           manager: Arc<ChannelManager<EnforcingChannelKeys, Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>, Arc<TestBroadcaster>, Arc<KeyProvider>, Arc<FuzzEstimator>, Arc<dyn Logger>>>,
 	           monitor: Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>,
+	           broadcaster: Arc<TestBroadcaster>,
 	           handler: PeerManager<Peer<'a>, Arc<ChannelManager<EnforcingChannelKeys, Arc<channelmonitor::SimpleManyChannelMonitor<OutPoint, EnforcingChannelKeys, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<ChainWatchInterfaceUtil>>>, Arc<TestBroadcaster>, Arc<KeyProvider>, Arc<FuzzEstimator>, Arc<dyn Logger>>>, Arc<dyn Logger>>) -> Self {
 		MoneyLossDetector {
 			manager,
 			monitor,
+			broadcaster,
 			handler,
 
 			peers,
@@ -226,6 +233,34 @@ impl<'a> Drop for MoneyLossDetector<'a> {
 				self.connect_block(&[]);
 			}
 		}
+
+		// Test that all broadcasted transactions either spend one of our funding transactions or
+		// some other broadcasted transaction:
+
+		let mut txn_map = HashMap::new();
+		let mut funding_txn_map = HashMap::new();
+		for tx in self.funding_txn.drain(..) {
+			funding_txn_map.insert(tx.txid(), tx);
+		}
+		let mut txn_broadcasted = self.broadcaster.txn_broadcasted.lock().unwrap();
+		for tx in txn_broadcasted.drain(..) {
+			txn_map.insert(tx.txid(), tx);
+		}
+		/*for (_, tx) in txn_map.iter() {
+			for inp in tx.input.iter() {
+				let prev_tx = match funding_txn_map.get(&inp.prev_hash) {
+					Some(ptx) => ptx,
+					None => {
+						txn_map.get(&inp.prev_hash).unwrap()
+					}
+				};
+				assert!(prev_tx.output.len() > inp.prev_index as usize);
+			}
+		}*/
+
+		//XXX: Find all non-conflicting sets of txn broadcasted and ensure that in each case we
+		//always get back at least the amount we expect minus tx fees (which we should be able to
+		//calculate now!
 	}
 }
 
@@ -327,7 +362,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 	};
 
 	let watch = Arc::new(ChainWatchInterfaceUtil::new(Network::Bitcoin));
-	let broadcast = Arc::new(TestBroadcaster{});
+	let broadcast = Arc::new(TestBroadcaster{ txn_broadcasted: Mutex::new(Vec::new()) });
 	let monitor = Arc::new(channelmonitor::SimpleManyChannelMonitor::new(watch.clone(), broadcast.clone(), Arc::clone(&logger), fee_est.clone()));
 
 	let keys_manager = Arc::new(KeyProvider { node_secret: our_network_key.clone(), counter: AtomicU64::new(0) });
@@ -340,7 +375,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 	let net_graph_msg_handler = Arc::new(NetGraphMsgHandler::new(watch.clone(), Arc::clone(&logger)));
 
 	let peers = RefCell::new([false; 256]);
-	let mut loss_detector = MoneyLossDetector::new(&peers, channelmanager.clone(), monitor.clone(), PeerManager::new(MessageHandler {
+	let mut loss_detector = MoneyLossDetector::new(&peers, channelmanager.clone(), monitor.clone(), broadcast.clone(), PeerManager::new(MessageHandler {
 		chan_handler: channelmanager.clone(),
 		route_handler: net_graph_msg_handler.clone(),
 	}, our_network_key, &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0], Arc::clone(&logger)));

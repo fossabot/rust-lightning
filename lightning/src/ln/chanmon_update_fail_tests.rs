@@ -1863,3 +1863,7 @@ fn test_path_paused_mpp() {
 
 	claim_payment_along_route_with_secret(&nodes[0], &[&[&nodes[1], &nodes[3]], &[&nodes[2], &nodes[3]]], false, payment_preimage, Some(payment_secret), 200_000);
 }
+
+//TODO: Add a test that creates a channel, but in the inbound direction the monitor update fails to
+//persist on funding_signed, but the channelmanager gets persisted, and then when we reload it from
+//disk, we need to make sure the channel gets closed!

@@ -95,6 +95,7 @@ struct FuzzEstimator {
 }
 impl FeeEstimator for FuzzEstimator {
 	fn get_est_sat_per_1000_weight(&self, _: ConfirmationTarget) -> u64 {
+println!("fee_get");
 		//TODO: We should actually be testing at least much more than 64k...
 		match self.input.get_slice(2) {
 			Some(slice) => cmp::max(slice_to_be16(slice) as u64, 253),
@@ -388,7 +389,9 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 	let mut pending_funding_relay = Vec::new();
 
 	loop {
-		match get_slice!(1)[0] {
+let a = get_slice!(1)[0];
+println!("action: {}", a);
+		match a {
 			0 => {
 				let mut new_id = 0;
 				for i in 1..256 {
@@ -575,13 +578,16 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 			// 15 is above
 			_ => return,
 		}
+println!("PROCESSING EVENTS");
 		loss_detector.handler.process_events();
 		for event in loss_detector.manager.get_and_clear_pending_events() {
 			match event {
 				Event::FundingGenerationReady { temporary_channel_id, channel_value_satoshis, output_script, .. } => {
+println!("fgr");
 					pending_funding_generation.push((temporary_channel_id, channel_value_satoshis, output_script));
 				},
 				Event::FundingBroadcastSafe { funding_txo, .. } => {
+println!("fbs");
 					pending_funding_relay.push(pending_funding_signatures.remove(&funding_txo).unwrap());
 				},
 				Event::PaymentReceived { payment_hash, payment_secret, amt } => {
@@ -591,6 +597,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 				Event::PaymentSent {..} => {},
 				Event::PaymentFailed {..} => {},
 				Event::PendingHTLCsForwardable {..} => {
+println!("PENDING HTLCS FORWARDABLE");
 					should_forward = true;
 				},
 				Event::SpendableOutputs {..} => {},

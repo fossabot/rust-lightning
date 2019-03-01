@@ -713,6 +713,7 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref> 
 		let res = ChannelManager {
 			default_configuration: config.clone(),
 			genesis_hash: genesis_block(network).header.bitcoin_hash(),
+			//genesis_hash: Sha256dHash::from_hex("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206").unwrap(),
 			fee_estimator: fee_est,
 			monitor,
 			tx_broadcaster,

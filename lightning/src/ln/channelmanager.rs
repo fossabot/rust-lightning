@@ -76,6 +76,7 @@ enum PendingForwardReceiveHTLCInfo {
 	},
 	Receive {
 		payment_data: Option<msgs::FinalOnionHopData>,
+		incoming_cltv_expiry: u32, // Used to track when we should expire pending HTLCs that go unclaimed
 	},
 }
 
@@ -125,6 +126,7 @@ struct ClaimableHTLC {
 	src: HTLCPreviousHopData,
 	value: u64,
 	payment_data: Option<msgs::FinalOnionHopData>,
+	cltv_expiry: u32,
 }
 
 /// Tracks the inbound corresponding to an outbound HTLC
@@ -1028,7 +1030,10 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref> ChannelMan
 				// delay) once they've send us a commitment_signed!
 
 				PendingHTLCStatus::Forward(PendingHTLCInfo {
-					type_data: PendingForwardReceiveHTLCInfo::Receive { payment_data },
+					type_data: PendingForwardReceiveHTLCInfo::Receive {
+						payment_data,
+						incoming_cltv_expiry: msg.cltv_expiry,
+					},
 					payment_hash: msg.payment_hash.clone(),
 					incoming_shared_secret: shared_secret,
 					amt_to_forward: next_hop_data.amt_to_forward,
@@ -1643,7 +1648,7 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref> ChannelMan
 					for forward_info in pending_forwards.drain(..) {
 						match forward_info {
 							HTLCForwardInfo::AddHTLC { prev_short_channel_id, prev_htlc_id, forward_info: PendingHTLCInfo {
-									type_data: PendingForwardReceiveHTLCInfo::Receive { payment_data },
+									type_data: PendingForwardReceiveHTLCInfo::Receive { payment_data, incoming_cltv_expiry },
 									incoming_shared_secret, payment_hash, amt_to_forward, .. }, } => {
 								let prev_hop_data = HTLCPreviousHopData {
 									short_channel_id: prev_short_channel_id,
@@ -1659,6 +1664,7 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref> ChannelMan
 									src: prev_hop_data,
 									value: amt_to_forward,
 									payment_data: payment_data.clone(),
+									cltv_expiry: incoming_cltv_expiry,
 								});
 								if let &Some(ref data) = &payment_data {
 									for htlc in htlcs.iter() {
@@ -2843,6 +2849,7 @@ impl<ChanSigner: ChannelKeys, M: Deref + Sync + Send, T: Deref + Sync + Send, K:
 		log_trace!(self, "Block {} at height {} connected with {} txn matched", header_hash, height, txn_matched.len());
 		let _ = self.total_consistency_lock.read().unwrap();
 		let mut failed_channels = Vec::new();
+		let mut timed_out_htlcs = Vec::new();
 		{
 			let mut channel_lock = self.channel_state.lock().unwrap();
 			let channel_state = &mut *channel_lock;
@@ -2912,9 +2919,28 @@ impl<ChanSigner: ChannelKeys, M: Deref + Sync + Send, T: Deref + Sync + Send, K:
 				}
 				true
 			});
+
+			channel_state.claimable_htlcs.retain(|&(ref payment_hash, _), htlcs| {
+				htlcs.retain(|htlc| {
+					if height >= htlc.cltv_expiry - CLTV_CLAIM_BUFFER - LATENCY_GRACE_PERIOD_BLOCKS {
+						timed_out_htlcs.push((HTLCSource::PreviousHopData(htlc.src.clone()), payment_hash.clone(), htlc.value));
+						false
+					} else { true }
+				});
+				!htlcs.is_empty()
+			});
 		}
 		for failure in failed_channels.drain(..) {
 			self.finish_force_close_channel(failure);
+		}
+
+		for (source, payment_hash, value) in timed_out_htlcs.drain(..) {
+			// Call it preimage_unknown as the issue, ultimately, is that the user failed to
+			// provide us a preimage within the cltv_expiry time window.
+			self.fail_htlc_backwards_internal(self.channel_state.lock().unwrap(), source, &payment_hash, HTLCFailReason::Reason {
+				failure_code: 0x4000 | 15,
+				data: byte_utils::be64_to_array(value).to_vec()
+			});
 		}
 		self.latest_block_height.store(height as usize, Ordering::Release);
 		*self.last_block_hash.try_lock().expect("block_(dis)connected must not be called in parallel") = header_hash;
@@ -3268,9 +3294,10 @@ impl Writeable for PendingHTLCInfo {
 				onion_packet.write(writer)?;
 				short_channel_id.write(writer)?;
 			},
-			&PendingForwardReceiveHTLCInfo::Receive { ref payment_data } => {
+			&PendingForwardReceiveHTLCInfo::Receive { ref payment_data, ref incoming_cltv_expiry } => {
 				1u8.write(writer)?;
 				payment_data.write(writer)?;
+				incoming_cltv_expiry.write(writer)?;
 			},
 		}
 		self.incoming_shared_secret.write(writer)?;
@@ -3291,6 +3318,7 @@ impl Readable for PendingHTLCInfo {
 				},
 				1u8 => PendingForwardReceiveHTLCInfo::Receive {
 					payment_data: Readable::read(reader)?,
+					incoming_cltv_expiry: Readable::read(reader)?,
 				},
 				_ => return Err(DecodeError::InvalidValue),
 			},
@@ -3505,6 +3533,7 @@ impl<ChanSigner: ChannelKeys + Writeable, M: Deref, T: Deref, K: Deref, F: Deref
 				htlc.src.write(writer)?;
 				htlc.value.write(writer)?;
 				htlc.payment_data.write(writer)?;
+				htlc.cltv_expiry.write(writer)?;
 			}
 		}
 
@@ -3678,6 +3707,7 @@ impl<'a, ChanSigner: ChannelKeys + Readable, M: Deref, T: Deref, K: Deref, F: De
 					src: Readable::read(reader)?,
 					value: Readable::read(reader)?,
 					payment_data: Readable::read(reader)?,
+					cltv_expiry: Readable::read(reader)?,
 				});
 			}
 			claimable_htlcs.insert(payment_hash, previous_hops);

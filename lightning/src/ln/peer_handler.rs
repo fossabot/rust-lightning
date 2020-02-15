@@ -1182,7 +1182,7 @@ impl<Descriptor: SocketDescriptor, CM: Deref, L: Deref> PeerManager<Descriptor, 
 
 				let ping = msgs::Ping {
 					ponglen: 0,
-					byteslen: 64,
+					byteslen: 0,
 				};
 				peer.pending_outbound_buffer.push_back(peer.channel_encryptor.encrypt_message(&encode_msg!(&ping)));
 

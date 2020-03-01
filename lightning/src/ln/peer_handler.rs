@@ -1134,18 +1134,30 @@ impl<Descriptor: SocketDescriptor, CM: Deref> PeerManager<Descriptor, CM> where 
 
 	/// Will most likely call send_data on all of the registered descriptors, thus, be very careful with reentrancy issues!
 	pub fn timer_tick_occured(&self) {
-		let mut peers_lock = self.peers.lock().unwrap();
+		let mut descriptors_needing_disconnect = Vec::new();
 		{
+			let peers_lock = self.peers.lock().unwrap();
+			for (descriptor, peer) in peers_lock.peers.iter() {
+				if peer.awaiting_pong {
+					descriptors_needing_disconnect.push(descriptor.clone());
+				}
+			}
+		}
+
+		for mut descriptor in descriptors_needing_disconnect.drain(..) {
+			descriptor.disconnect_socket();
+		}
+
+		{
+			let mut peers_lock = self.peers.lock().unwrap();
 			let peers = &mut *peers_lock;
 			let peers_needing_send = &mut peers.peers_needing_send;
 			let node_id_to_descriptor = &mut peers.node_id_to_descriptor;
 			let peers = &mut peers.peers;
-			let mut descriptors_needing_disconnect = Vec::new();
 
 			peers.retain(|descriptor, peer| {
 				if peer.awaiting_pong {
 					peers_needing_send.remove(descriptor);
-					descriptors_needing_disconnect.push(descriptor.clone());
 					match peer.their_node_id {
 						Some(node_id) => {
 							log_trace!(self, "Disconnecting peer with id {} due to ping timeout", node_id);
@@ -1178,10 +1190,6 @@ impl<Descriptor: SocketDescriptor, CM: Deref> PeerManager<Descriptor, CM> where 
 				peer.awaiting_pong = true;
 				true
 			});
-
-			for mut descriptor in descriptors_needing_disconnect.drain(..) {
-				descriptor.disconnect_socket();
-			}
 		}
 	}
 }

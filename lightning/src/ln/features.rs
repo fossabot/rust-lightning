@@ -97,7 +97,7 @@ mod sealed {
 			// Byte 0
 			DataLossProtect | InitialRoutingSync | UpfrontShutdownScript,
 			// Byte 1
-			VariableLengthOnion | PaymentSecret,
+			VariableLengthOnion | StaticRemoteKey | PaymentSecret,
 			// Byte 2
 			BasicMPP,
 		],
@@ -115,7 +115,7 @@ mod sealed {
 			// Byte 0
 			DataLossProtect | UpfrontShutdownScript,
 			// Byte 1
-			VariableLengthOnion | PaymentSecret,
+			VariableLengthOnion | StaticRemoteKey | PaymentSecret,
 			// Byte 2
 			BasicMPP,
 		],
@@ -236,6 +236,8 @@ mod sealed {
 		"Feature flags for `option_upfront_shutdown_script`.");
 	define_feature!(9, VariableLengthOnion, [InitContext, NodeContext],
 		"Feature flags for `var_onion_optin`.");
+	define_feature!(13, StaticRemoteKey, [InitContext, NodeContext],
+		"Feature flags for `option_static_remotekey`.");
 	define_feature!(15, PaymentSecret, [InitContext, NodeContext],
 		"Feature flags for `payment_secret`.");
 	define_feature!(17, BasicMPP, [InitContext, NodeContext],
@@ -470,6 +472,12 @@ impl<T: sealed::VariableLengthOnion> Features<T> {
 	}
 }
 
+impl<T: sealed::StaticRemoteKey> Features<T> {
+	pub(crate) fn supports_static_remote_key(&self) -> bool {
+		<T as sealed::StaticRemoteKey>::supports_feature(&self.flags)
+	}
+}
+
 impl<T: sealed::InitialRoutingSync> Features<T> {
 	pub(crate) fn initial_routing_sync(&self) -> bool {
 		<T as sealed::InitialRoutingSync>::supports_feature(&self.flags)
@@ -600,11 +608,11 @@ mod tests {
 		{
 			// Check that the flags are as expected:
 			// - option_data_loss_protect
-			// - var_onion_optin | payment_secret
+			// - var_onion_optin | static_remote_key | payment_secret
 			// - basic_mpp
 			assert_eq!(node_features.flags.len(), 3);
 			assert_eq!(node_features.flags[0], 0b00000010);
-			assert_eq!(node_features.flags[1], 0b10000010);
+			assert_eq!(node_features.flags[1], 0b10100010);
 			assert_eq!(node_features.flags[2], 0b00000010);
 		}
 

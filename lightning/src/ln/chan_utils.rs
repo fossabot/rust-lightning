@@ -279,7 +279,7 @@ pub struct ChannelPublicKeys {
 	pub revocation_basepoint: PublicKey,
 	/// The base point which is used (with derive_public_key) to derive a per-commitment payment
 	/// public key which receives immediately-spendable non-HTLC-encumbered funds.
-	pub payment_basepoint: PublicKey,
+	pub payment_point: PublicKey,
 	/// The base point which is used (with derive_public_key) to derive a per-commitment payment
 	/// public key which receives non-HTLC-encumbered funds which are only available for spending
 	/// after some delay (or can be claimed via the revocation path).
@@ -292,7 +292,7 @@ pub struct ChannelPublicKeys {
 impl_writeable!(ChannelPublicKeys, 33*5, {
 	funding_pubkey,
 	revocation_basepoint,
-	payment_basepoint,
+	payment_point,
 	delayed_payment_basepoint,
 	htlc_basepoint
 });

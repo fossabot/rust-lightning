@@ -1680,14 +1680,28 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 		// Channel state once they will not be present in the next received commitment
 		// transaction).
 		let mut removed_outbound_total_msat = 0;
+		// When calculating the set of HTLCs which will be included in their next
+		// commitment_signed, all inbound HTLCs are included (as all states imply it will be
+		// included) and only committed outbound HTLCs, see below.
+		let mut their_acked_htlcs = self.pending_inbound_htlcs.len() as u64;
 		for ref htlc in self.pending_outbound_htlcs.iter() {
 			if let OutboundHTLCState::AwaitingRemoteRevokeToRemove(None) = htlc.state {
 				removed_outbound_total_msat += htlc.amount_msat;
 			} else if let OutboundHTLCState::AwaitingRemovedRemoteRevoke(None) = htlc.state {
 				removed_outbound_total_msat += htlc.amount_msat;
+			} else if let OutboundHTLCState::Committed = htlc.state {
+				// We only include outbound HTLCs if it will not be included in their next
+				// commitment_signed, ie if they've responded to us with an RAA after announcement
+				// and if they haven't yet started removal.
+				their_acked_htlcs += 1;
 			}
 		}
-		if htlc_inbound_value_msat + msg.amount_msat + self.value_to_self_msat > (self.channel_value_satoshis - Channel::<ChanSigner>::get_our_channel_reserve_satoshis(self.channel_value_satoshis)) * 1000 + removed_outbound_total_msat {
+		let remote_fee_cost = if !self.channel_outbound {
+			// Note that we ignore the fact that feerate_per_kw can change at runtime here. That's
+			// OK, soon enough it won't be the case.
+			self.feerate_per_kw * (COMMITMENT_TX_BASE_WEIGHT + their_acked_htlcs * COMMITMENT_TX_WEIGHT_PER_HTLC) / 1000
+		} else { 0 };
+		if htlc_inbound_value_msat + msg.amount_msat + self.value_to_self_msat > (self.channel_value_satoshis - Channel::<ChanSigner>::get_our_channel_reserve_satoshis(self.channel_value_satoshis) - remote_fee_cost) * 1000 + removed_outbound_total_msat {
 			return Err(ChannelError::Close("Remote HTLC add would put them over their reserve value"));
 		}
 		if self.next_remote_htlc_id != msg.htlc_id {

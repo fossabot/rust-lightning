@@ -961,6 +961,8 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 		} else {
 			(value_to_self_msat / 1000, value_to_remote_msat / 1000 - total_fee as i64 - ANCHOR_VALUE_SATOSHIS as i64)
 		};
+		debug_assert!(value_to_self >= 0);
+		debug_assert!(value_to_remote >= 0);
 
 		let value_to_a = if local { value_to_self } else { value_to_remote };
 		let value_to_b = if local { value_to_remote } else { value_to_self };
@@ -997,6 +999,7 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 				value: value_to_b as u64
 			}, None));
 		}
+
 
 		transaction_utils::sort_outputs(&mut txouts, |a, b| {
 			if let &Some(ref a_htlc) = a {
@@ -4443,8 +4446,6 @@ mod tests {
 
 	#[test]
 	fn outbound_commitment_test() {
-		return; // Disabled as we don't have test vectors for the currently-partially-implemented option_anchor_outputs
-
 		// Test vectors from BOLT 3 Appendix C:
 		let feeest = TestFeeEstimator{fee_est: 15000};
 		let logger : Arc<Logger> = Arc::new(test_utils::TestLogger::new());

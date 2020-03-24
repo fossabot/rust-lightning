@@ -26,8 +26,8 @@ use std::{cmp, mem};
 
 const MAX_ALLOC_SIZE: usize = 64*1024;
 
-pub(super) const HTLC_SUCCESS_TX_WEIGHT: u64 = 703;
-pub(super) const HTLC_TIMEOUT_TX_WEIGHT: u64 = 663;
+pub(super) const HTLC_SUCCESS_TX_WEIGHT: u64 = 703; // XXX
+pub(super) const HTLC_TIMEOUT_TX_WEIGHT: u64 = 663; // XXX
 
 #[derive(PartialEq)]
 pub(crate) enum HTLCType {
@@ -38,9 +38,9 @@ pub(crate) enum HTLCType {
 impl HTLCType {
 	/// Check if a given tx witnessScript len matchs one of a pre-signed HTLC
 	pub(crate) fn scriptlen_to_htlctype(witness_script_len: usize) ->  Option<HTLCType> {
-		if witness_script_len == 133 {
+		if witness_script_len == 136 {
 			Some(HTLCType::OfferedHTLC)
-		} else if witness_script_len >= 136 && witness_script_len <= 139 {
+		} else if witness_script_len >= 139 && witness_script_len <= 142 {
 			Some(HTLCType::AcceptedHTLC)
 		} else {
 			None
@@ -385,6 +385,9 @@ pub(crate) fn get_htlc_redeemscript_with_explicit_keys(htlc: &HTLCOutputInCommit
 		              .push_opcode(opcodes::all::OP_CHECKSIG)
 		              .push_opcode(opcodes::all::OP_ENDIF)
 		              .push_opcode(opcodes::all::OP_ENDIF)
+		              .push_int(1)
+		              .push_opcode(opcodes::all::OP_CSV)
+		              .push_opcode(opcodes::all::OP_DROP)
 		              .into_script()
 	} else {
 		Builder::new().push_opcode(opcodes::all::OP_DUP)
@@ -416,6 +419,9 @@ pub(crate) fn get_htlc_redeemscript_with_explicit_keys(htlc: &HTLCOutputInCommit
 		              .push_opcode(opcodes::all::OP_CHECKSIG)
 		              .push_opcode(opcodes::all::OP_ENDIF)
 		              .push_opcode(opcodes::all::OP_ENDIF)
+		              .push_int(1)
+		              .push_opcode(opcodes::all::OP_CSV)
+		              .push_opcode(opcodes::all::OP_DROP)
 		              .into_script()
 	}
 }
@@ -452,7 +458,7 @@ pub fn build_htlc_transaction(prev_hash: &Txid, feerate_per_kw: u64, to_self_del
 			vout: htlc.transaction_output_index.expect("Can't build an HTLC transaction for a dust output"),
 		},
 		script_sig: Script::new(),
-		sequence: 0,
+		sequence: 1,
 		witness: Vec::new(),
 	});
 

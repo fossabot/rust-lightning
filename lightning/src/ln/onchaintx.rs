@@ -376,19 +376,19 @@ impl<ChanSigner: ChannelKeys> OnchainTxHandler<ChanSigner> {
 			tx_weight +=  match inp {
 				// number_of_witness_elements + sig_length + revocation_sig + pubkey_length + revocationpubkey + witness_script_length + witness_script
 				&InputDescriptors::RevokedOfferedHTLC => {
-					1 + 1 + 73 + 1 + 33 + 1 + 133
+					1 + 1 + 73 + 1 + 33 + 1 + 136
 				},
 				// number_of_witness_elements + sig_length + revocation_sig + pubkey_length + revocationpubkey + witness_script_length + witness_script
 				&InputDescriptors::RevokedReceivedHTLC => {
-					1 + 1 + 73 + 1 + 33 + 1 + 139
+					1 + 1 + 73 + 1 + 33 + 1 + 142
 				},
 				// number_of_witness_elements + sig_length + remotehtlc_sig  + preimage_length + preimage + witness_script_length + witness_script
 				&InputDescriptors::OfferedHTLC => {
-					1 + 1 + 73 + 1 + 32 + 1 + 133
+					1 + 1 + 73 + 1 + 32 + 1 + 136
 				},
 				// number_of_witness_elements + sig_length + revocation_sig + pubkey_length + revocationpubkey + witness_script_length + witness_script
 				&InputDescriptors::ReceivedHTLC => {
-					1 + 1 + 73 + 1 + 1 + 1 + 139
+					1 + 1 + 73 + 1 + 1 + 1 + 142
 				},
 				// number_of_witness_elements + sig_length + revocation_sig + true_length + op_true + witness_script_length + witness_script
 				&InputDescriptors::RevokedOutput => {
@@ -421,12 +421,16 @@ impl<ChanSigner: ChannelKeys> OnchainTxHandler<ChanSigner> {
 	{
 		if cached_claim_datas.per_input_material.len() == 0 { return None } // But don't prune pending claiming request yet, we may have to resurrect HTLCs
 		let mut inputs = Vec::new();
-		for outp in cached_claim_datas.per_input_material.keys() {
+		for (outp, material) in cached_claim_datas.per_input_material.iter() {
 			log_trace!(logger, "Outpoint {}:{}", outp.txid, outp.vout);
 			inputs.push(TxIn {
 				previous_output: *outp,
 				script_sig: Script::new(),
-				sequence: 0xfffffffd,
+				sequence: match material {
+					&InputMaterial::Revoked { .. } => 1, // XXX: Depends on spec discussion
+					&InputMaterial::RemoteHTLC { .. } => 1,
+					&InputMaterial::LocalHTLC { .. } => 1,
+				},
 				witness: Vec::new(),
 			});
 		}

@@ -565,11 +565,30 @@ fn test_update_fee_that_funder_cannot_afford() {
 	let node_cfgs = create_node_cfgs(2, &chanmon_cfgs);
 	let node_chanmgrs = create_node_chanmgrs(2, &node_cfgs, &[None, None]);
 	let nodes = create_network(2, &node_cfgs, &node_chanmgrs);
-	let channel_value = 1888;
-	let chan = create_announced_chan_between_nodes_with_value(&nodes, 0, 1, channel_value, 700000, InitFeatures::known(), InitFeatures::known());
+	let channel_value = 1984;
+	let push_msat = 800_000;
+
+	// First check that any smaller channel_value would result in an error as the funder cannot
+	// afford any commitment transaction(s).
+	nodes[0].node.create_channel(nodes[1].node.get_our_node_id(), channel_value - 1, push_msat, 42, None).unwrap();
+	let open_channel_message = get_event_msg!(nodes[0], MessageSendEvent::SendOpenChannel, nodes[1].node.get_our_node_id());
+
+	nodes[1].node.handle_open_channel(&nodes[0].node.get_our_node_id(), InitFeatures::known(), &open_channel_message);
+	let msg_events = nodes[1].node.get_and_clear_pending_msg_events();
+	assert_eq!(msg_events.len(), 1);
+	if let MessageSendEvent::HandleError { ref action, .. } = msg_events[0] {
+		match action {
+			&ErrorAction::SendErrorMessage { .. } => {
+				nodes[1].logger.assert_log("lightning::ln::channelmanager".to_string(), "Insufficient funding amount for initial commitment".to_string(), 1);
+			},
+			_ => panic!("unexpected event!"),
+		}
+	} else { assert!(false); }
+
+	let chan = create_announced_chan_between_nodes_with_value(&nodes, 0, 1, channel_value, push_msat, InitFeatures::known(), InitFeatures::known());
 	let channel_id = chan.2;
 
-	let feerate = 260;
+	let feerate = 255;
 	nodes[0].node.update_fee(channel_id, feerate).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_msg = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());

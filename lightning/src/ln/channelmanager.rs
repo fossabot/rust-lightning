@@ -1172,6 +1172,13 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref> ChannelMan
 					if msg.cltv_expiry > cur_height + CLTV_FAR_FAR_AWAY as u32 { // expiry_too_far
 						break Some(("CLTV expiry is too far in the future", 21, None));
 					}
+					// We should be safe against unintentional channel-closure by our onchain logic due to this later
+					// offering a LATENCY_GRACE_PERIOD_BLOCKS. But to make our policy coherent with reception, apply
+					// same delay.
+					if (*outgoing_cltv_value) as u64 <= (cur_height + CLTV_CLAIM_BUFFER + LATENCY_GRACE_PERIOD_BLOCKS) as u64 {
+						break Some(("Outgoing CLTV value is too close", 0x1000 | 14, Some(self.get_channel_update(chan).unwrap())));
+					}
+
 					break None;
 				}
 				{

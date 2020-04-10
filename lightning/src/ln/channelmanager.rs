@@ -1160,7 +1160,8 @@ impl<ChanSigner: ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref> ChannelMan
 						break Some(("Forwarding node has tampered with the intended HTLC values or origin node has an obsolete cltv_expiry_delta", 0x1000 | 13, Some(self.get_channel_update(chan).unwrap())));
 					}
 					let cur_height = self.latest_block_height.load(Ordering::Acquire) as u32 + 1;
-					// We want to have at least LATENCY_GRACE_PERIOD_BLOCKS to fail prior to going on chain CLAIM_BUFFER blocks before expiration
+					// Theoritically, channel counterparty shouldn't send us a HLC expiring now, but we want to be robust wrt to counterparty
+					// packet sanitization.
 					if msg.cltv_expiry <= cur_height + CLTV_CLAIM_BUFFER + LATENCY_GRACE_PERIOD_BLOCKS as u32 { // expiry_too_soon
 						break Some(("CLTV expiry is too close", 0x1000 | 14, Some(self.get_channel_update(chan).unwrap())));
 					}

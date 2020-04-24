@@ -11,7 +11,6 @@ Still missing tons of error-handling. See GitHub issues for suggested projects i
 """
 
 [features]
-fuzztarget = ["bitcoin/fuzztarget"]
 # Unlog messages superior at targeted level.
 max_level_off = []
 max_level_error = []
@@ -19,8 +18,13 @@ max_level_warn = []
 max_level_info = []
 max_level_debug = []
 
+# Testing only features, don't enable these unless you want to run rust-lightning tests!
+fuzztarget = ["bitcoin/fuzztarget"]
+mutation_testing = ["mutagen"]
+
 [dependencies]
 bitcoin = "0.23"
+mutagen = { git = "https://github.com/TheBlueMatt/mutagen", optional = true }
 
 [dev-dependencies.bitcoin]
 version = "0.23"

@@ -2,7 +2,7 @@
 //! spendable on-chain outputs which the user owns and is responsible for using just as any other
 //! on-chain output which is theirs.
 
-use bitcoin::blockdata::transaction::{Transaction, OutPoint, TxOut, SigHashType};
+use bitcoin::blockdata::transaction::{Transaction, OutPoint, TxOut};
 use bitcoin::blockdata::script::{Script, Builder};
 use bitcoin::blockdata::opcodes;
 use bitcoin::network::constants::Network;

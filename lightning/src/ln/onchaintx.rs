@@ -242,7 +242,6 @@ pub struct OnchainTxHandler<ChanSigner: ChannelKeys> {
 	prev_local_commitment: Option<LocalCommitmentTransaction>,
 	prev_local_htlc_sigs: Option<Vec<Option<(usize, Signature)>>>,
 	local_csv: u16,
-	remote_csv: u16,
 
 	key_storage: ChanSigner,
 
@@ -288,8 +287,6 @@ impl<ChanSigner: ChannelKeys + Writeable> OnchainTxHandler<ChanSigner> {
 		self.prev_local_htlc_sigs.write(writer)?;
 
 		self.local_csv.write(writer)?;
-
-		self.remote_csv.write(writer)?;
 
 		self.key_storage.write(writer)?;
 
@@ -338,8 +335,6 @@ impl<ChanSigner: ChannelKeys + Readable> ReadableArgs<Arc<Logger>> for OnchainTx
 		let prev_local_htlc_sigs = Readable::read(reader)?;
 
 		let local_csv = Readable::read(reader)?;
-
-		let remote_csv = Readable::read(reader)?;
 
 		let key_storage = Readable::read(reader)?;
 
@@ -393,7 +388,6 @@ impl<ChanSigner: ChannelKeys + Readable> ReadableArgs<Arc<Logger>> for OnchainTx
 			prev_local_commitment,
 			prev_local_htlc_sigs,
 			local_csv,
-			remote_csv,
 			key_storage,
 			claimable_outpoints,
 			pending_claim_requests,
@@ -405,7 +399,7 @@ impl<ChanSigner: ChannelKeys + Readable> ReadableArgs<Arc<Logger>> for OnchainTx
 }
 
 impl<ChanSigner: ChannelKeys> OnchainTxHandler<ChanSigner> {
-	pub(super) fn new(destination_script: Script, keys: ChanSigner, local_csv: u16, remote_csv: u16, logger: Arc<Logger>) -> Self {
+	pub(super) fn new(destination_script: Script, keys: ChanSigner, local_csv: u16, logger: Arc<Logger>) -> Self {
 
 		let key_storage = keys;
 
@@ -416,7 +410,6 @@ impl<ChanSigner: ChannelKeys> OnchainTxHandler<ChanSigner> {
 			prev_local_commitment: None,
 			prev_local_htlc_sigs: None,
 			local_csv,
-			remote_csv,
 			key_storage,
 			pending_claim_requests: HashMap::new(),
 			claimable_outpoints: HashMap::new(),
@@ -583,13 +576,13 @@ impl<ChanSigner: ChannelKeys> OnchainTxHandler<ChanSigner> {
 
 			for (i, (outp, per_outp_material)) in cached_claim_datas.per_input_material.iter().enumerate() {
 				match per_outp_material {
-					&InputMaterial::Revoked { ref per_commitment_point, ref remote_delayed_payment_base_key, ref remote_htlc_base_key, ref per_commitment_key, ref input_descriptor, ref amount, ref htlc } => {
+					&InputMaterial::Revoked { ref per_commitment_point, ref remote_delayed_payment_base_key, ref remote_htlc_base_key, ref per_commitment_key, ref input_descriptor, ref amount, ref htlc, ref on_remote_tx_csv } => {
 						if let Ok(chan_keys) = TxCreationKeys::new(&self.secp_ctx, &per_commitment_point, remote_delayed_payment_base_key, remote_htlc_base_key, &self.key_storage.pubkeys().revocation_basepoint, &self.key_storage.pubkeys().htlc_basepoint) {
 
 							let witness_script = if let Some(ref htlc) = *htlc {
 								chan_utils::get_htlc_redeemscript_with_explicit_keys(&htlc, &chan_keys.a_htlc_key, &chan_keys.b_htlc_key, &chan_keys.revocation_key)
 							} else {
-								chan_utils::get_revokeable_redeemscript(&chan_keys.revocation_key, self.remote_csv, &chan_keys.a_delayed_payment_key)
+								chan_utils::get_revokeable_redeemscript(&chan_keys.revocation_key, *on_remote_tx_csv, &chan_keys.a_delayed_payment_key)
 							};
 
 							if let Ok(sig) = self.key_storage.sign_justice_transaction(&bumped_tx, i, &witness_script, *amount, &per_commitment_key, &chan_keys.revocation_key, htlc.is_some(),  &self.secp_ctx) {

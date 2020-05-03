@@ -3459,7 +3459,10 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 	pub fn get_channel_reestablish(&self) -> msgs::ChannelReestablish {
 		assert_eq!(self.channel_state & ChannelState::PeerDisconnected as u32, ChannelState::PeerDisconnected as u32);
 		assert_ne!(self.cur_remote_commitment_transaction_number, INITIAL_COMMITMENT_NUMBER);
-		let mut pk = [2; 33]; pk[1] = 0xff; // Select a dummy pubkey which is valid in both "real" and fuzztarget modes
+		// fuzztarget mode marks a subset of pubkeys as invalid so that we can hit "invalid pubkey"
+		// branches, but we unwrap it below, so we arbitrarily select a dummy pubkey which is both
+		// valid, and valid in fuzztarget mode's arbitrary validity criteria:
+		let mut pk = [2; 33]; pk[1] = 0xff;
 		let dummy_pubkey = PublicKey::from_slice(&pk).unwrap();
 		let data_loss_protect = if self.cur_remote_commitment_transaction_number + 1 < INITIAL_COMMITMENT_NUMBER {
 			let remote_last_secret = self.commitment_secrets.get_secret(self.cur_remote_commitment_transaction_number + 2).unwrap();

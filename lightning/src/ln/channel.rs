@@ -977,11 +977,14 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 
 		if value_to_b >= (dust_limit_satoshis as i64) {
 			log_trace!(self, "   ...including {} output with value {}", if local { "to_remote" } else { "to_local" }, value_to_b);
+				let static_payment_pk_hash = WPubkeyHash::hash(&if local {
+						self.their_pubkeys.as_ref().unwrap().payment_basepoint
+					} else {
+						self.local_keys.pubkeys().payment_basepoint
+					}.serialize());
 			txouts.push((TxOut {
 				script_pubkey: Builder::new().push_opcode(opcodes::all::OP_PUSHBYTES_0)
-				                             .push_slice(&WPubkeyHash::hash(&if local {
-				                                         self.their_pubkeys.as_ref().unwrap().payment_basepoint
-				                                 } else { self.local_keys.pubkeys().payment_basepoint }.serialize())[..])
+				                             .push_slice(&static_payment_pk_hash[..])
 				                             .into_script(),
 				value: value_to_b as u64
 			}, None));

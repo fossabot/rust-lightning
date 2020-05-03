@@ -601,7 +601,7 @@ impl KeysInterface for KeysManager {
 		}
 		let funding_key = key_step!(b"funding key", commitment_seed);
 		let revocation_base_key = key_step!(b"revocation base key", funding_key);
-		let payment_key = key_step!(b"payment base key", revocation_base_key);
+		let payment_key = key_step!(b"payment key", revocation_base_key);
 		let delayed_payment_base_key = key_step!(b"delayed payment base key", payment_key);
 		let htlc_base_key = key_step!(b"HTLC base key", delayed_payment_base_key);
 

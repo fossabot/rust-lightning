@@ -3459,6 +3459,9 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 	pub fn get_channel_reestablish(&self) -> msgs::ChannelReestablish {
 		assert_eq!(self.channel_state & ChannelState::PeerDisconnected as u32, ChannelState::PeerDisconnected as u32);
 		assert_ne!(self.cur_remote_commitment_transaction_number, INITIAL_COMMITMENT_NUMBER);
+		// Prior to static_remotekey, my_current_per_commitment_point was critical to claiming
+		// current to_remote balances. However, it no longer has any use, and thus is now simply
+		// set to a dummy (but valid, as required by the spec) public key.
 		// fuzztarget mode marks a subset of pubkeys as invalid so that we can hit "invalid pubkey"
 		// branches, but we unwrap it below, so we arbitrarily select a dummy pubkey which is both
 		// valid, and valid in fuzztarget mode's arbitrary validity criteria:

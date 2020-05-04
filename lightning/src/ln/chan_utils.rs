@@ -277,8 +277,9 @@ pub struct ChannelPublicKeys {
 	/// a commitment transaction so that their counterparty can claim all available funds if they
 	/// broadcast an old state.
 	pub revocation_basepoint: PublicKey,
-	/// The public key which receives immediately-spendable non-HTLC-encumbered funds. This key is
-	/// static across every commitment transaction.
+	/// The public key which receives our immediately spendable primary channel balance in
+	/// remote-broadcasted commitment transactions. This key is static across every commitment
+	/// transaction.
 	pub payment_point: PublicKey,
 	/// The base point which is used (with derive_public_key) to derive a per-commitment payment
 	/// public key which receives non-HTLC-encumbered funds which are only available for spending

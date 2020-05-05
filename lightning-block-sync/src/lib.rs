@@ -16,6 +16,8 @@ mod utils;
 #[cfg(any(feature = "rest-client", feature = "rpc-client"))]
 pub mod http_clients;
 
+pub mod dns_headers;
+
 use lightning::chain::{chaininterface, keysinterface};
 use lightning::chain::chaininterface::{BlockNotifierArc, ChainListener};
 use lightning::ln::channelmonitor::{ChannelMonitor, ManyChannelMonitor};

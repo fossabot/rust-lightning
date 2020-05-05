@@ -43,6 +43,7 @@ jobs:
         if: matrix.build-net-tokio
         run: |
           cd lightning-block-sync
+          RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features tokio
           RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rest-client
           RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rpc-client
           RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rpc-client,rest-client

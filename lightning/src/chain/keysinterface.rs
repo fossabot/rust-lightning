@@ -209,6 +209,8 @@ pub trait ChannelKeys : Send+Clone {
 	fn commitment_seed<'a>(&'a self) -> &'a [u8; 32];
 	/// Gets the local channel public keys and basepoints
 	fn pubkeys<'a>(&'a self) -> &'a ChannelPublicKeys;
+	/// Gets the key derivation parameters in case of new derivation.
+	fn key_derivation_params(&self) -> (u64, u64);
 
 	/// Create a signature for a remote commitment transaction and associated HTLC transactions.
 	///
@@ -331,6 +333,8 @@ pub struct InMemoryChannelKeys {
 	pub(crate) remote_channel_pubkeys: Option<ChannelPublicKeys>,
 	/// The total value of this channel
 	channel_value_satoshis: u64,
+	/// Key derivation parameters
+	key_derivation_params: (u64, u64),
 }
 
 impl InMemoryChannelKeys {
@@ -343,7 +347,8 @@ impl InMemoryChannelKeys {
 		delayed_payment_base_key: SecretKey,
 		htlc_base_key: SecretKey,
 		commitment_seed: [u8; 32],
-		channel_value_satoshis: u64) -> InMemoryChannelKeys {
+		channel_value_satoshis: u64,
+		key_derivation_params: (u64, u64)) -> InMemoryChannelKeys {
 		let local_channel_pubkeys =
 			InMemoryChannelKeys::make_local_keys(secp_ctx, &funding_key, &revocation_base_key,
 			                                     &payment_key, &delayed_payment_base_key,
@@ -358,6 +363,7 @@ impl InMemoryChannelKeys {
 			channel_value_satoshis,
 			local_channel_pubkeys,
 			remote_channel_pubkeys: None,
+			key_derivation_params,
 		}
 	}
 
@@ -386,6 +392,7 @@ impl ChannelKeys for InMemoryChannelKeys {
 	fn htlc_base_key(&self) -> &SecretKey { &self.htlc_base_key }
 	fn commitment_seed(&self) -> &[u8; 32] { &self.commitment_seed }
 	fn pubkeys<'a>(&'a self) -> &'a ChannelPublicKeys { &self.local_channel_pubkeys }
+	fn key_derivation_params(&self) -> (u64, u64) { self.key_derivation_params }
 
 	fn sign_remote_commitment<T: secp256k1::Signing + secp256k1::Verification>(&self, feerate_per_kw: u64, commitment_tx: &Transaction, keys: &TxCreationKeys, htlcs: &[&HTLCOutputInCommitment], to_self_delay: u16, secp_ctx: &Secp256k1<T>) -> Result<(Signature, Vec<Signature>), ()> {
 		if commitment_tx.input.len() != 1 { return Err(()); }
@@ -490,6 +497,8 @@ impl Writeable for InMemoryChannelKeys {
 		self.commitment_seed.write(writer)?;
 		self.remote_channel_pubkeys.write(writer)?;
 		self.channel_value_satoshis.write(writer)?;
+		self.key_derivation_params.0.write(writer)?;
+		self.key_derivation_params.1.write(writer)?;
 
 		Ok(())
 	}
@@ -510,6 +519,8 @@ impl Readable for InMemoryChannelKeys {
 			InMemoryChannelKeys::make_local_keys(&secp_ctx, &funding_key, &revocation_base_key,
 			                                     &payment_key, &delayed_payment_base_key,
 			                                     &htlc_base_key);
+		let user_id_1 = Readable::read(reader)?;
+		let user_id_2 = Readable::read(reader)?;
 
 		Ok(InMemoryChannelKeys {
 			funding_key,
@@ -520,7 +531,8 @@ impl Readable for InMemoryChannelKeys {
 			commitment_seed,
 			channel_value_satoshis,
 			local_channel_pubkeys,
-			remote_channel_pubkeys
+			remote_channel_pubkeys,
+			key_derivation_params: (user_id_1, user_id_2),
 		})
 	}
 }
@@ -620,31 +632,24 @@ impl KeysManager {
 		unique_start.input(&self.seed);
 		unique_start
 	}
-}
+	/// Derive an old set of ChannelKeys for per-channel secrets based on a key derivation
+	/// parameters.
+	/// Key derivation parameters are accessible through a per-channel secrets
+	/// ChannelKeys::key_derivation_params and is provided inside DynamicOuputP2WSH in case of
+	/// onchain output detection for which a corresponding delayed_payment_key must be derived.
+	pub fn derive_channel_keys(&self, channel_value_satoshis: u64, user_id_1: u64, user_id_2: u64) -> InMemoryChannelKeys {
+		let chan_id = ((user_id_1 & 0xFFFF0000) >> 32) as u32;
+		let mut unique_start = Sha256::engine();
+		unique_start.input(&byte_utils::be64_to_array(user_id_2));
+		unique_start.input(&byte_utils::be32_to_array(user_id_1 as u32));
+		unique_start.input(&self.seed);
 
-impl KeysInterface for KeysManager {
-	type ChanKeySigner = InMemoryChannelKeys;
-
-	fn get_node_secret(&self) -> SecretKey {
-		self.node_secret.clone()
-	}
-
-	fn get_destination_script(&self) -> Script {
-		self.destination_script.clone()
-	}
-
-	fn get_shutdown_pubkey(&self) -> PublicKey {
-		self.shutdown_pubkey.clone()
-	}
-
-	fn get_channel_keys(&self, _inbound: bool, channel_value_satoshis: u64) -> InMemoryChannelKeys {
 		// We only seriously intend to rely on the channel_master_key for true secure
 		// entropy, everything else just ensures uniqueness. We rely on the unique_start (ie
 		// starting_time provided in the constructor) to be unique.
 		let mut sha = self.derive_unique_start();
 
-		let child_ix = self.channel_child_index.fetch_add(1, Ordering::AcqRel);
-		let child_privkey = self.channel_master_key.ckd_priv(&self.secp_ctx, ChildNumber::from_hardened_idx(child_ix as u32).expect("key space exhausted")).expect("Your RNG is busted");
+		let child_privkey = self.channel_master_key.ckd_priv(&self.secp_ctx, ChildNumber::from_hardened_idx(chan_id).expect("key space exhausted")).expect("Your RNG is busted");
 		sha.input(&child_privkey.private_key.key[..]);
 
 		let seed = Sha256::from_engine(sha).into_inner();
@@ -678,8 +683,31 @@ impl KeysInterface for KeysManager {
 			delayed_payment_base_key,
 			htlc_base_key,
 			commitment_seed,
-			channel_value_satoshis
+			channel_value_satoshis,
+			(user_id_1, user_id_2),
 		)
+	}
+}
+
+impl KeysInterface for KeysManager {
+	type ChanKeySigner = InMemoryChannelKeys;
+
+	fn get_node_secret(&self) -> SecretKey {
+		self.node_secret.clone()
+	}
+
+	fn get_destination_script(&self) -> Script {
+		self.destination_script.clone()
+	}
+
+	fn get_shutdown_pubkey(&self) -> PublicKey {
+		self.shutdown_pubkey.clone()
+	}
+
+	fn get_channel_keys(&self, _inbound: bool, channel_value_satoshis: u64) -> InMemoryChannelKeys {
+		let child_ix = self.channel_child_index.fetch_add(1, Ordering::AcqRel);
+		let ix_and_nanos: u64 = (child_ix as u64) << 32 | (self.starting_time_nanos as u64);
+		self.derive_channel_keys(channel_value_satoshis, ix_and_nanos, self.starting_time_secs)
 	}
 
 	fn get_onion_rand(&self) -> (SecretKey, [u8; 32]) {

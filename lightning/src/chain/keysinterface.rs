@@ -7,7 +7,6 @@ use bitcoin::blockdata::script::{Script, Builder};
 use bitcoin::blockdata::opcodes;
 use bitcoin::network::constants::Network;
 use bitcoin::util::bip32::{ExtendedPrivKey, ExtendedPubKey, ChildNumber};
-use bitcoin::util::address::Address;
 use bitcoin::util::bip143;
 
 use bitcoin::hashes::{Hash, HashEngine};
@@ -86,20 +85,13 @@ pub enum SpendableOutputDescriptor {
 		/// The remote_revocation_pubkey used to derive witnessScript
 		remote_revocation_pubkey: PublicKey
 	},
-	// TODO: Note that because key is now static and exactly what is provided by us, we should drop
-	// this in favor of StaticOutput:
-	/// An output to a P2WPKH, spendable exclusively by the given private key.
+	/// An output to a P2WPKH, spendable exclusively by our payment key.
 	/// The witness in the spending input, is, thus, simply:
 	/// <BIP 143 signature> <payment key>
 	///
 	/// These are generally the result of our counterparty having broadcast the current state,
 	/// allowing us to claim the non-HTLC-encumbered outputs immediately.
-	///
-	/// To derive the payment key corresponding to the channel state, you must pass the
-	/// channel's payment_base_key and the provided per_commitment_point to
-	/// chan_utils::derive_private_key. The resulting key should be used to sign the spending
-	/// transaction.
-	DynamicOutputP2WPKH {
+	StaticOutputRemotePayment {
 		/// The outpoint which is spendable
 		outpoint: OutPoint,
 		/// The output which is reference by the given outpoint
@@ -128,7 +120,7 @@ impl Writeable for SpendableOutputDescriptor {
 				key_derivation_params.1.write(writer)?;
 				remote_revocation_pubkey.write(writer)?;
 			},
-			&SpendableOutputDescriptor::DynamicOutputP2WPKH { ref outpoint, ref output, ref key_derivation_params } => {
+			&SpendableOutputDescriptor::StaticOutputRemotePayment { ref outpoint, ref output, ref key_derivation_params } => {
 				2u8.write(writer)?;
 				outpoint.write(writer)?;
 				output.write(writer)?;
@@ -155,7 +147,7 @@ impl Readable for SpendableOutputDescriptor {
 				key_derivation_params: (Readable::read(reader)?, Readable::read(reader)?),
 				remote_revocation_pubkey: Readable::read(reader)?,
 			}),
-			2u8 => Ok(SpendableOutputDescriptor::DynamicOutputP2WPKH {
+			2u8 => Ok(SpendableOutputDescriptor::StaticOutputRemotePayment {
 				outpoint: Readable::read(reader)?,
 				output: Readable::read(reader)?,
 				key_derivation_params: (Readable::read(reader)?, Readable::read(reader)?),

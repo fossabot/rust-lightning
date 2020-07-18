@@ -401,7 +401,6 @@ pub fn get_route<L: Deref>(our_node_id: &PublicKey, network: &NetworkGraph, targ
 
 #[cfg(test)]
 mod tests {
-	use chain::chaininterface;
 	use routing::router::{get_route, RouteHint, RoutingFees};
 	use routing::network_graph::NetGraphMsgHandler;
 	use ln::features::{ChannelFeatures, InitFeatures, NodeFeatures};
@@ -425,7 +424,7 @@ mod tests {
 	use std::sync::Arc;
 
 	// Using the same keys for LN and BTC ids
-	fn add_channel(net_graph_msg_handler: &NetGraphMsgHandler<Arc<chaininterface::ChainWatchInterfaceUtil>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_1_privkey: &SecretKey,
+	fn add_channel(net_graph_msg_handler: &NetGraphMsgHandler<Arc<test_utils::TestChainSource>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_1_privkey: &SecretKey,
 	   node_2_privkey: &SecretKey, features: ChannelFeatures, short_channel_id: u64) {
 		let node_id_1 = PublicKey::from_secret_key(&secp_ctx, node_1_privkey);
 		let node_id_2 = PublicKey::from_secret_key(&secp_ctx, node_2_privkey);
@@ -455,7 +454,7 @@ mod tests {
 		};
 	}
 
-	fn update_channel(net_graph_msg_handler: &NetGraphMsgHandler<Arc<chaininterface::ChainWatchInterfaceUtil>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_privkey: &SecretKey, update: UnsignedChannelUpdate) {
+	fn update_channel(net_graph_msg_handler: &NetGraphMsgHandler<Arc<test_utils::TestChainSource>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_privkey: &SecretKey, update: UnsignedChannelUpdate) {
 		let msghash = hash_to_message!(&Sha256dHash::hash(&update.encode()[..])[..]);
 		let valid_channel_update = ChannelUpdate {
 			signature: secp_ctx.sign(&msghash, node_privkey),
@@ -470,7 +469,7 @@ mod tests {
 	}
 
 
-	fn add_or_update_node(net_graph_msg_handler: &NetGraphMsgHandler<Arc<chaininterface::ChainWatchInterfaceUtil>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_privkey: &SecretKey,
+	fn add_or_update_node(net_graph_msg_handler: &NetGraphMsgHandler<Arc<test_utils::TestChainSource>, Arc<test_utils::TestLogger>>, secp_ctx: &Secp256k1<All>, node_privkey: &SecretKey,
 	   features: NodeFeatures, timestamp: u32) {
 		let node_id = PublicKey::from_secret_key(&secp_ctx, node_privkey);
 		let unsigned_announcement = UnsignedNodeAnnouncement {
@@ -501,8 +500,7 @@ mod tests {
 		let our_privkey = &SecretKey::from_slice(&hex::decode("0101010101010101010101010101010101010101010101010101010101010101").unwrap()[..]).unwrap();
 		let our_id = PublicKey::from_secret_key(&secp_ctx, our_privkey);
 		let logger = Arc::new(test_utils::TestLogger::new());
-		let chain_monitor = Arc::new(chaininterface::ChainWatchInterfaceUtil::new(Network::Testnet));
-		let net_graph_msg_handler = NetGraphMsgHandler::new(chain_monitor, Arc::clone(&logger));
+		let net_graph_msg_handler = NetGraphMsgHandler::new(None, Arc::clone(&logger));
 		// Build network from our_id to node8:
 		//
 		//        -1(1)2-  node1  -1(3)2-

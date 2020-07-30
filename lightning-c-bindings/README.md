@@ -21,21 +21,24 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    been mapped from equivalent Rust constructors.
 
  * Traits are mapped into a concrete struct containing a void pointer for your use and a jump table
-   listing the functions which the trait must implement. The void pointer is free for use as you
-   see fit and passed as the first argument to all function calls, but note that no destructor
-   function is (currently) provided.
+   listing the functions which the trait must implement. The void pointer may be set to any value
+   and is never interpreted (or dereferenced) by the bindings logic in any way. You may wish to use
+   it as a pointer to your own internal datastructure, though it may also occasionally make sense
+   to e.g. case a file descriptor into a void pointer and use it to track a socket. It is passed as
+   the first argument to all function calls in the trait.
 
    Rust native structs which implement a trait result in the generation of an X_as_Y function which
    allows you to use the native Rust object in place of the trait. Such generated objects are only
    valid as long as the original Rust native object is owned by a C-wrapped struct, and has not been
    free'd or moved as a part of a Rust function call.
 
- * Rust "unitary" enums are mapped simply as an equivalent C enum, however some Rust enums may
-   contain fields which are only valid in specific contexts. Such enums are mapped automatically by
-   cbindgen as a tag whih indicates the type and a union which holds the relevant fields for a
-   given tag. A X_free function is provided for the enum as a whole which automatically frees the
-   correct fields for a given tag, and a Sentinel tag is provided which causes the free function to
-   do nothing (but which must never appear in an enum when accessed by Rust code).
+ * Rust "unitary" enums are mapped simply as an equivalent C enum, however some Rust enums have
+   variants which contain payloads. Such enums are mapped automatically by cbindgen as a tag which
+   indicates the type and a union which holds the relevant fields for a given tag. A X_free
+   function is provided for the enum as a whole which automatically frees the correct fields for a
+   given tag, and a Sentinel tag is provided which causes the free function to do nothing (but
+   which must never appear in an enum when accessed by Rust code). The Sentinel tag is used by the
+   C++ wrapper classes to allow moving the ownership of an enum while invalidating the old copy.
 
  * Struct member functions are mapped as Struct_function_name and take a reference to the mapped
    struct as their first argument. Free-standing functions are mapped simply as function_name and

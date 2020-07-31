@@ -1,13 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Generate (and reasonably test) C bindings
 
-# First wipe all the existing C bindings:
-rm lightning-c-bindings/src/{ln,util,chain,routing}/*
-
 set -e
-# Then build and run the latest c-bindings-gen binary
+# First build the latest c-bindings-gen binary
 cd c-bindings-gen && cargo build && cd ..
+
+# Then wipe all the existing C bindings (because we're being run in the right directory)
+rm -rf lightning-c-bindings/src/{ln,util,chain,routing}
+mkdir -p lightning-c-bindings/src/{ln,util,chain,routing}
+
+# Finally, run the c-bindings-gen binary, building fresh bindings.
 SRC="$(pwd)/lightning/src"
 OUT="$(pwd)/lightning-c-bindings/src"
 OUT_TEMPL="$(pwd)/lightning-c-bindings/src/c_types/derived.rs"

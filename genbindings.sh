@@ -40,7 +40,7 @@ gcc -Wall -g -pthread demo.c ../target/debug/liblightning.a -ldl
 # but ideally we shouldn't add new leaks and once we fix the existing ones we should
 # fail in response to any memory leaks.
 g++ -Wall -g -pthread demo.cpp -L../target/debug/ -llightning -ldl
-LD_LIBRARY_PATH=../target/debug/ valgrind --memcheck:leak-check=full --show-leak-kinds=all ./a.out
+LD_LIBRARY_PATH=../target/debug/ valgrind --error-exitcode=4 --memcheck:leak-check=full --show-leak-kinds=all ./a.out
 
 # Test a statically-linked C++ version, tracking the resulting binary size and runtime 
 # across debug, LTO, and cross-language LTO builds (using the same compiler each time).

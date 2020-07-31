@@ -295,26 +295,12 @@ pub fn write_method_call_params<W: std::io::Write>(w: &mut W, sig: &syn::Signatu
 						if let Some(t) = types.crate_types.traits.get(&types.maybe_resolve_ident(&real_type).unwrap()) {
 							// We're returning an associated trait from a Rust fn call to a C trait
 							// object.
-							writeln!(w, "{} {{\n\t\t{}this_arg: Box::into_raw(Box::new(ret)) as *mut c_void,", t.ident, extra_indent).unwrap();
-							for i in t.items.iter() {
-								match i {
-									syn::TraitItem::Method(m) => {
-										if let ExportStatus::Export = export_status(&m.attrs) {
-											if let syn::ReturnType::Type(_, rtype) = &m.sig.output {
-												if let syn::Type::Reference(r) = &**rtype {
-													write!(w, "\t\t{}{}: ", extra_indent, m.sig.ident).unwrap();
-													types.write_empty_rust_val(w, &*r.elem);
-													writeln!(w, ",\n\t\t{}set_{}: Some({}_{}_set_{}),", extra_indent, m.sig.ident, this_type, real_type, m.sig.ident).unwrap();
-													continue;
-												}
-											}
-											writeln!(w, "\t\t{}{}: {}_{}_{},", extra_indent, m.sig.ident, this_type, real_type, m.sig.ident).unwrap();
-										}
-									},
-									_ => {},
-								}
-							}
-							write!(w, "\t{}}}", extra_indent).unwrap();
+							writeln!(w, "let mut rust_obj = {} {{ inner: Box::into_raw(Box::new(ret)), _underlying_ref: false }};", this_type).unwrap();
+							writeln!(w, "\t{}let mut ret = {}_as_{}(&rust_obj);", extra_indent, this_type, t.ident).unwrap();
+							writeln!(w, "\t{}// We want to free rust_obj when ret gets drop()'d, not rust_obj, so wipe rust_obj's pointer and set ret's free() fn", extra_indent).unwrap();
+							writeln!(w, "\t{}rust_obj.inner = std::ptr::null_mut();", extra_indent).unwrap();
+							writeln!(w, "\t{}ret.free = Some({}_free_void);", extra_indent, this_type).unwrap();
+							writeln!(w, "\t{}ret", extra_indent).unwrap();
 							return;
 						}
 					}

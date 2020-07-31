@@ -186,19 +186,25 @@ int main() {
 	LDKNetwork network = LDKNetwork_Testnet;
 
 	// Trait implementations:
-	LDKFeeEstimator fee_est;
-	fee_est.this_arg = NULL;
-	fee_est.get_est_sat_per_1000_weight = get_fee;
+	LDKFeeEstimator fee_est {
+		.this_arg = NULL,
+		.get_est_sat_per_1000_weight = get_fee,
+		.free = NULL,
+	};
 
-	LDKBroadcasterInterface broadcast;
-	broadcast.this_arg = NULL;
-	broadcast.broadcast_transaction = broadcast_tx;
+	LDKBroadcasterInterface broadcast {
+		.this_arg = NULL,
+		.broadcast_transaction = broadcast_tx,
+		.free = NULL,
+	};
 
 	// Instantiate classes for node 1:
 
-	LDKLogger logger1;
-	logger1.this_arg = (void*)1;
-	logger1.log = print_log;
+	LDKLogger logger1 {
+		.this_arg = (void*)1,
+		.log = print_log,
+		.free = NULL,
+	};
 
 	LDK::ChainWatchInterfaceUtil chain1 = ChainWatchInterfaceUtil_new(network);
 	LDK::BlockNotifier blocks1 = BlockNotifier_new(ChainWatchInterfaceUtil_as_ChainWatchInterface(&chain1));
@@ -208,6 +214,7 @@ int main() {
 		.add_monitor = add_channel_monitor,
 		.update_monitor = update_channel_monitor,
 		.get_and_clear_pending_htlcs_updated = monitors_pending_htlcs_updated,
+		.free = NULL,
 	};
 
 	LDK::KeysManager keys1 = KeysManager_new(&node_seed, network, 0, 0);
@@ -237,9 +244,11 @@ int main() {
 
 	// Instantiate classes for node 2:
 
-	LDKLogger logger2;
-	logger2.this_arg = (void*)2;
-	logger2.log = print_log;
+	LDKLogger logger2 {
+		.this_arg = (void*)2,
+		.log = print_log,
+		.free = NULL,
+	};
 
 	LDK::ChainWatchInterfaceUtil chain2 = ChainWatchInterfaceUtil_new(network);
 	LDK::BlockNotifier blocks2 = BlockNotifier_new(ChainWatchInterfaceUtil_as_ChainWatchInterface(&chain2));
@@ -249,6 +258,7 @@ int main() {
 		.add_monitor = add_channel_monitor,
 		.update_monitor = update_channel_monitor,
 		.get_and_clear_pending_htlcs_updated = monitors_pending_htlcs_updated,
+		.free = NULL,
 	};
 
 	memset(&node_seed, 1, 32);
@@ -284,19 +294,25 @@ int main() {
 	assert(!pipe(pipefds_1_to_2));
 	assert(!pipe(pipefds_2_to_1));
 
-	LDKSocketDescriptor sock1;
-	sock1.this_arg = (void*)(long)pipefds_1_to_2[1];
-	sock1.send_data = sock_send_data;
-	sock1.disconnect_socket = sock_disconnect_socket;
-	sock1.eq = sock_eq;
-	sock1.hash = sock_hash;
+	LDKSocketDescriptor sock1 {
+		.this_arg = (void*)(long)pipefds_1_to_2[1],
+		.send_data = sock_send_data,
+		.disconnect_socket = sock_disconnect_socket,
+		.eq = sock_eq,
+		.hash = sock_hash,
+		.clone = NULL,
+		.free = NULL,
+	};
 
-	LDKSocketDescriptor sock2;
-	sock2.this_arg = (void*)(long)pipefds_2_to_1[1];
-	sock2.send_data = sock_send_data;
-	sock2.disconnect_socket = sock_disconnect_socket;
-	sock2.eq = sock_eq;
-	sock2.hash = sock_hash;
+	LDKSocketDescriptor sock2 {
+		.this_arg = (void*)(long)pipefds_2_to_1[1],
+		.send_data = sock_send_data,
+		.disconnect_socket = sock_disconnect_socket,
+		.eq = sock_eq,
+		.hash = sock_hash,
+		.clone = NULL,
+		.free = NULL,
+	};
 
 	std::thread t1(&sock_read_data_thread, pipefds_2_to_1[0], &sock1, &net1);
 	std::thread t2(&sock_read_data_thread, pipefds_1_to_2[0], &sock2, &net2);

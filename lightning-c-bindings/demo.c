@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 void print_log(const void *this_arg, const char *record) {
 	printf("%s", record);
@@ -35,26 +36,35 @@ LDKCVec_HTLCUpdateZ monitors_pending_htlcs_updated(const void *this_arg) {
 
 int main() {
 	uint8_t node_seed[32];
+	memset(node_seed, 0, 32);
 
 	LDKNetwork net = LDKNetwork_Bitcoin;
 
-	LDKLogger logger;
-	logger.this_arg = NULL;
-	logger.log = print_log;
+	LDKLogger logger = {
+		.this_arg = NULL,
+		.log = print_log,
+		.free = NULL,
+	};
 
-	LDKFeeEstimator fee_est;
-	fee_est.this_arg = NULL;
-	fee_est.get_est_sat_per_1000_weight = get_fee;
+	LDKFeeEstimator fee_est = {
+		.this_arg = NULL,
+		.get_est_sat_per_1000_weight = get_fee,
+		.free = NULL
+	};
 
-	LDKManyChannelMonitor mon;
-	mon.this_arg = NULL;
-	mon.add_monitor = add_channel_monitor;
-	mon.update_monitor = update_channel_monitor;
-	mon.get_and_clear_pending_htlcs_updated = monitors_pending_htlcs_updated;
+	LDKManyChannelMonitor mon = {
+		.this_arg = NULL,
+		.add_monitor = add_channel_monitor,
+		.update_monitor = update_channel_monitor,
+		.get_and_clear_pending_htlcs_updated = monitors_pending_htlcs_updated,
+		.free = NULL,
+	};
 
-	LDKBroadcasterInterface broadcast;
-	broadcast.this_arg = NULL;
-	broadcast.broadcast_transaction = broadcast_tx;
+	LDKBroadcasterInterface broadcast = {
+		broadcast.this_arg = NULL,
+		broadcast.broadcast_transaction = broadcast_tx,
+		.free = NULL,
+	};
 
 	LDKKeysManager keys = KeysManager_new(&node_seed, net, 0, 0);
 	LDKKeysInterface keys_source = KeysManager_as_KeysInterface(&keys);

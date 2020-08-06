@@ -4,6 +4,9 @@ source by the c-bindings-gen crate contained in the source tree and
 language-specific bindings, and are thus incredibly low-level and may be difficult to work with
 directly.
 
+In other words, if you're reading this, you're either writing bindings for a new language, or
+you're in the wrong place - individual language bindings should come with their own documentation.
+
 LDK C Bindings
 ===================
 
@@ -13,41 +16,42 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
 
  * Structs are mapped into a simple wrapper containing a pointer to the native Rust-Lightning
    object and a flag to indicate whether the object is owned or only a reference. Such mappings
-   usually generate a X_free function which must be called to release the allocated resources.
-   Note that calling X_free will do nothing if the underlying pointer is NULL or if the reference
+   usually generate a `X_free` function which must be called to release the allocated resources.
+   Note that calling `X_free` will do nothing if the underlying pointer is NULL or if the reference
    flag is set.
 
    You MUST NOT create such wrapper structs manually, relying instead on constructors which have
    been mapped from equivalent Rust constructors.
 
- * Traits are mapped into a concrete struct containing a void pointer for your use and a jump table
-   listing the functions which the trait must implement. The void pointer may be set to any value
-   and is never interpreted (or dereferenced) by the bindings logic in any way. You may wish to use
-   it as a pointer to your own internal datastructure, though it may also occasionally make sense
-   to e.g. case a file descriptor into a void pointer and use it to track a socket. It is passed as
-   the first argument to all function calls in the trait.
+ * Traits are mapped into a concrete struct containing a void pointer and a jump table listing the
+   functions which the trait must implement. The void pointer may be set to any value and is never
+   interpreted (or dereferenced) by the bindings logic in any way. It is passed as the first
+   argument to all function calls in the trait. You may wish to use it as a pointer to your own
+   internal data structure, though it may also occasionally make sense to e.g. cast a file
+   descriptor into a void pointer and use it to track a socket.
 
-   Rust native structs which implement a trait result in the generation of an X_as_Y function which
-   allows you to use the native Rust object in place of the trait. Such generated objects are only
-   valid as long as the original Rust native object is owned by a C-wrapped struct, and has not been
-   free'd or moved as a part of a Rust function call.
+ * Rust structs that implement a trait result in the generation of an `X_as_Y` function which allows
+   you to use the native Rust object in place of the trait. Such generated objects are only valid as
+   long as the original Rust native object is owned by a C-wrapped struct, and has not been free'd
+   or moved as a part of a Rust function call.
 
  * Rust "unitary" enums are mapped simply as an equivalent C enum, however some Rust enums have
    variants which contain payloads. Such enums are mapped automatically by cbindgen as a tag which
-   indicates the type and a union which holds the relevant fields for a given tag. A X_free
+   indicates the type and a union which holds the relevant fields for a given tag. A `X_free`
    function is provided for the enum as a whole which automatically frees the correct fields for a
-   given tag, and a Sentinel tag is provided which causes the free function to do nothing (but
-   which must never appear in an enum when accessed by Rust code). The Sentinel tag is used by the
-   C++ wrapper classes to allow moving the ownership of an enum while invalidating the old copy.
+   given tag, and a `Sentinel` tag is provided which causes the free function to do nothing (but
+   which must never appear in an enum when accessed by Rust code). The `Sentinel` tag is used by
+   the C++ wrapper classes to allow moving the ownership of an enum while invalidating the old copy.
 
- * Struct member functions are mapped as Struct_function_name and take a reference to the mapped
-   struct as their first argument. Free-standing functions are mapped simply as function_name and
+ * Struct member functions are mapped as `Struct_function_name` and take a reference to the mapped
+   struct as their first argument. Free-standing functions are mapped simply as `function_name` and
    take the relevant mapped type arguments.
 
-   Functions may return a reference to an underlying Rust object with a mapped struct or may return
-   an owned Rust object with the same. The corresponding free function will Do The Right Thing
-   based on the reference flag contained in the object, but you should reference the Rust
-   documentation for the official reference on the type returned.
+   Functions may return a reference to an underlying Rust object with a mapped struct or an owned
+   Rust object with the same. The mapped struct contains a flag to indicate if the poitned-to Rust
+   object is owned or only a reference, and the object's corresponding free function will Do The
+   Right Thing based on the flag. In order to determine the expected return type, you should
+   reference the Rust documentation for the function.
 
 As the bindings are auto-generated, the best resource for documentation on them is the native Rust
 docs available via `cargo doc` or [docs.rs/lightning](https://docs.rs/lightning).
@@ -57,25 +61,26 @@ function parameters are largely only ever passed by reference or by move, with p
 semantics only applying to primitive types. However, because the underlying types are largely
 pointers, the same function signature may imply two different memory ownership semantics. Thus, you
 MUST read the Rust documentation while using the C bindings. For functions which ownership is moved
-to Rust, the corresponding X_free function MUST NOT be called on the object, whereas for all other
-objects, X_free MUST be used to free resources.
+to Rust, the corresponding `X_fre`e function MUST NOT be called on the object, whereas for all other
+objects, `X_free` MUST be used to free resources.
 
 LDK C++ Bindings
 ================
 
 The C++ bindings available at include/lightningpp.hpp require extern "C" inclusion of lightning.h
-and rust_types.h first, and represent only thin wrappers around the C types which provide a few
-C++-isms to make memory model correctness easier to achieve. The wrapper classes provide:
- * automated destructors which call the relevant X_free C functions,
- * move constructors both from themselves and the original C struct, with the original object
-   cleared to ensure destruction/X_free calls do not cause a double-free.
+and rust_types.h first. They represent thin wrappers around the C types which provide a few
+C++-isms to make memory model correctness easier to achieve. They provide:
+ * automated destructors which call the relevant `X_free` C functions,
+ * move constructors both from C++ classes and the original C struct, with the original object
+   cleared to ensure destruction/`X_free` calls do not cause a double-free.
  * Move semantics via the () operator, returning the original C struct and clearing the C++ object.
-   This allows calls such as C_function(cpp_object) which works as expected with move semantics.
+   This allows calls such as `C_function(cpp_object)` which works as expected with move semantics.
 
 In general, you should prefer to use the C++ bindings if possible, as they make memory leaks and
-other violations somewhat easier to avoid. Note that, because the exposed functions return
-the C type, you must bind returned values to the equivalent C++ type (replacing LDKX with LDK::X)
-to ensure the destructor is properly run. A demonstration of such usage is available at demo.cpp.
+other violations somewhat easier to avoid. Note that, because the C functions are not redefined in
+C++, all functions return the C type. Thus, you must bind returned values to the equivalent C++ type
+(replacing LDKX with LDK::X) to ensure the destructor is properly run. A demonstration of such usage
+is available at [demo.cpp](demo.cpp).
 
 **It is highly recommended that you test any code which relies on the C (or C++) bindings in
 valgrind, MemorySanitizer, or other similar tools to ensure correctness.**

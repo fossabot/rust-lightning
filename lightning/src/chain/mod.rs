@@ -4,11 +4,12 @@ use bitcoin::blockdata::script::Script;
 use bitcoin::blockdata::transaction::TxOut;
 use bitcoin::hash_types::{BlockHash, Txid};
 
+use chain::channelmonitor::{ChannelMonitor, ChannelMonitorUpdate, ChannelMonitorUpdateErr, HTLCUpdate};
 use chain::keysinterface::ChannelKeys;
 use chain::transaction::OutPoint;
-use ln::channelmonitor::{ChannelMonitor, ChannelMonitorUpdate, ChannelMonitorUpdateErr, HTLCUpdate};
 
 pub mod chaininterface;
+pub mod channelmonitor;
 pub mod transaction;
 pub mod keysinterface;
 

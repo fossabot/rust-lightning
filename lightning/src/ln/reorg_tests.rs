@@ -1,6 +1,6 @@
 //! Further functional tests which test blockchain reorganizations.
 
-use ln::channelmonitor::ANTI_REORG_DELAY;
+use chain::channelmonitor::ANTI_REORG_DELAY;
 use ln::features::InitFeatures;
 use ln::msgs::{ChannelMessageHandler, ErrorAction, HTLCFailChannelUpdate};
 use util::events::{Event, EventsProvider, MessageSendEvent, MessageSendEventsProvider};

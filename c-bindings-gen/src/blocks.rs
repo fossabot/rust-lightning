@@ -349,10 +349,16 @@ pub fn maybe_write_generics<W: std::io::Write>(w: &mut W, generics: &syn::Generi
 		for (idx, generic) in generics.params.iter().enumerate() {
 			match generic {
 				syn::GenericParam::Type(type_param) => {
-					let bound = type_param.bounds.iter().next().unwrap();
-					if let syn::TypeParamBound::Trait(trait_bound) = bound {
-						assert_simple_bound(&trait_bound);
-						write!(w, "{}{}", if idx != 0 { ", " } else { "" }, gen_types.maybe_resolve_ident(&type_param.ident).unwrap()).unwrap();
+					let mut printed_param = false;
+					for bound in type_param.bounds.iter() {
+						if let syn::TypeParamBound::Trait(trait_bound) = bound {
+							assert_simple_bound(&trait_bound);
+							write!(w, "{}{}", if idx != 0 { ", " } else { "" }, gen_types.maybe_resolve_ident(&type_param.ident).unwrap()).unwrap();
+							if printed_param {
+								unimplemented!("Can't print generic params that have multiple non-lifetime bounds");
+							}
+							printed_param = true;
+						}
 					}
 				},
 				syn::GenericParam::Lifetime(lt) => {

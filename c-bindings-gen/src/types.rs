@@ -433,14 +433,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 
 			// List of traits we map (possibly during processing of other files):
 			"crate::util::logger::Logger" => Some(""),
-			"crate::chain::chaininterface::BroadcasterInterface" => Some(""),
-			"crate::chain::chaininterface::FeeEstimator" => Some(""),
-			"crate::chain::chaininterface::ChainWatchInterface" if !is_ref => Some(""),
-			"crate::chain::keysinterface::KeysInterface" => Some(""),
-			"crate::ln::channelmonitor::ManyChannelMonitor" => Some(""),
-			"crate::ln::msgs::ChannelMessageHandler" => Some(""),
-			"crate::ln::msgs::RoutingMessageHandler" => Some(""),
-			"crate::util::events::EventsProvider" => Some(""),
+
 			_ => {
 				eprintln!("    Type {} unconvertable from C", full_path);
 				None
@@ -500,14 +493,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 
 			// List of traits we map (possibly during processing of other files):
 			"crate::util::logger::Logger" => Some(""),
-			"crate::chain::chaininterface::BroadcasterInterface" => Some(""),
-			"crate::chain::chaininterface::FeeEstimator" => Some(""),
-			"crate::chain::chaininterface::ChainWatchInterface" if !is_ref => Some(""),
-			"crate::chain::keysinterface::KeysInterface" => Some(""),
-			"crate::ln::channelmonitor::ManyChannelMonitor" => Some(""),
-			"crate::ln::msgs::ChannelMessageHandler" => Some(""),
-			"crate::ln::msgs::RoutingMessageHandler" => Some(""),
-			"crate::util::events::EventsProvider" => Some(""),
+
 			_ => {
 				eprintln!("    Type {} unconvertable from C", full_path);
 				None
@@ -591,9 +577,6 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			"ln::features::InitFeatures" if is_ref => Some("Box::into_raw(Box::new(crate::ln::features::InitFeatures { inner: &"),
 			"ln::features::InitFeatures" if !is_ref => Some("crate::ln::features::InitFeatures { inner: Box::into_raw(Box::new("),
 
-			// List of traits we map (possibly during processing of other files):
-			"crate::ln::msgs::ChannelMessageHandler" if is_ref => Some("&"),
-			"crate::ln::msgs::RoutingMessageHandler" if is_ref => Some("&"),
 			_ => {
 				eprintln!("    Type {} (is_ref: {}) unconvertable to C", full_path, is_ref);
 				None
@@ -657,9 +640,6 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			"ln::features::InitFeatures" if is_ref => Some(", _underlying_ref: true }))"),
 			"ln::features::InitFeatures" => Some(")), _underlying_ref: false }"),
 
-			// List of traits we map (possibly during processing of other files):
-			"crate::ln::msgs::ChannelMessageHandler" => Some(""),
-			"crate::ln::msgs::RoutingMessageHandler" => Some(""),
 			_ => {
 				eprintln!("    Type {} unconvertable to C", full_path);
 				None
@@ -1164,15 +1144,25 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				}
 
 				if let Some(gen_types) = generics {
-					if let Some((path, synpath)) = gen_types.maybe_resolve_path(&p.path) {
-						assert!(!self.is_known_container(&path, is_ref) && !self.is_transparent_container(&path, is_ref));
-						if let Some(c_type) = path_lookup(&path, is_ref, ptr_for_ref) {
+					if let Some((_, synpath)) = gen_types.maybe_resolve_path(&p.path) {
+						let genpath = self.resolve_path(&synpath);
+						assert!(!self.is_known_container(&genpath, is_ref) && !self.is_transparent_container(&genpath, is_ref));
+						if let Some(c_type) = path_lookup(&genpath, is_ref, ptr_for_ref) {
 							write!(w, "{}", c_type).unwrap();
 							return;
-						} else if let Some(decl_type) = self.declared.get(single_ident_generic_path_to_ident(synpath).unwrap()) {
-							decl_lookup(w, decl_type, &self.maybe_resolve_path(synpath).unwrap(), is_ref);
-							return;
-						} else { unimplemented!(); }
+						} else {
+							let synident = single_ident_generic_path_to_ident(synpath).unwrap();
+							if let Some(t) = self.crate_types.traits.get(&genpath) {
+								decl_lookup(w, &DeclType::Trait(t), &genpath, is_ref);
+								return;
+							} else if let Some(_) = self.imports.get(synident) {
+								// crate_types lookup has to have succeeded:
+								panic!("Failed to print inline conversion for {}", synident);
+							} else if let Some(decl_type) = self.declared.get(synident) {
+								decl_lookup(w, decl_type, &self.maybe_resolve_path(synpath).unwrap(), is_ref);
+								return;
+							} else { unimplemented!(); }
+						}
 					}
 				}
 
@@ -1185,7 +1175,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 					decl_lookup(w, &DeclType::MirroredEnum, &resolved_path, is_ref);
 				} else if let Some(ident) = single_ident_generic_path_to_ident(&p.path) {
 					if let Some(_) = self.imports.get(ident) {
-						// prefix_lookup has to have succeeded:
+						// crate_types lookup has to have succeeded:
 						panic!("Failed to print inline conversion for {}", ident);
 					} else if let Some(decl_type) = self.declared.get(ident) {
 						decl_lookup(w, decl_type, &self.maybe_resolve_ident(ident).unwrap(), is_ref);
@@ -1245,7 +1235,8 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 							write!(w, "crate::{} {{ inner: ", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if !is_ref =>
 							write!(w, "crate::{} {{ inner: Box::into_raw(Box::new(", decl_path).unwrap(),
-						_ => unimplemented!(),
+						DeclType::Trait(_) if is_ref => write!(w, "&").unwrap(),
+						_ => panic!("{:?}", decl_path),
 					}
 				});
 	}
@@ -1261,6 +1252,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 					DeclType::EnumIgnored|DeclType::StructImported if is_ref => write!(w, ", _underlying_ref: true }}").unwrap(),
 					DeclType::EnumIgnored|DeclType::StructImported if !is_ref && from_ptr => write!(w, ", _underlying_ref: false }}").unwrap(),
 					DeclType::EnumIgnored|DeclType::StructImported if !is_ref => write!(w, ")), _underlying_ref: false }}").unwrap(),
+					DeclType::Trait(_) if is_ref => {},
 					_ => unimplemented!(),
 				});
 	}

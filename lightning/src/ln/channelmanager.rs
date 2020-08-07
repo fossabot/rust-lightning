@@ -3723,7 +3723,6 @@ impl<ChanSigner: ChannelKeys + Writeable, M: Deref, T: Deref, K: Deref, F: Deref
 /// 5) Move the ChannelMonitors into your local ManyChannelMonitor.
 /// 6) Disconnect/connect blocks on the ChannelManager.
 /// 7) Register the new ChannelManager with your ChainWatchInterface.
-/// (C-not exported) due to references
 pub struct ChannelManagerReadArgs<'a, ChanSigner: 'a + ChannelKeys, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref>
 	where M::Target: ManyChannelMonitor<Keys=ChanSigner>,
         T::Target: BroadcasterInterface,
@@ -3731,7 +3730,6 @@ pub struct ChannelManagerReadArgs<'a, ChanSigner: 'a + ChannelKeys, M: Deref, T:
         F::Target: FeeEstimator,
         L::Target: Logger,
 {
-
 	/// The keys provider which will give us relevant keys. Some keys will be loaded during
 	/// deserialization.
 	pub keys_manager: K,
@@ -3768,6 +3766,7 @@ pub struct ChannelManagerReadArgs<'a, ChanSigner: 'a + ChannelKeys, M: Deref, T:
 	///
 	/// In such cases the latest local transactions will be sent to the tx_broadcaster included in
 	/// this struct.
+	/// (C-not exported) because we have no HashMap bindings
 	pub channel_monitors: HashMap<OutPoint, &'a mut ChannelMonitor<ChanSigner>>,
 }
 

@@ -23,6 +23,15 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    You MUST NOT create such wrapper structs manually, relying instead on constructors which have
    been mapped from equivalent Rust constructors.
 
+   For example, this is the mapping of ChannelManager.
+   ```
+   typedef struct MUST_USE_STRUCT LDKChannelManager {
+      /** ... */
+      const LDKlnChannelManager *inner;
+      bool _underlying_ref;
+   } LDKChannelManager;
+   ```
+
  * Traits are mapped into a concrete struct containing a void pointer and a jump table listing the
    functions which the trait must implement. The void pointer may be set to any value and is never
    interpreted (or dereferenced) by the bindings logic in any way. It is passed as the first
@@ -30,9 +39,29 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    internal data structure, though it may also occasionally make sense to e.g. cast a file
    descriptor into a void pointer and use it to track a socket.
 
+   Each trait additionally contains a `free` and `clone` function pointer, which may be NULL. The
+   `free` function is passed the void pointer when the object is `Drop`ed in Rust. The `clone`
+   function is passed the void pointer when the object is `Clone`ed in Rust, returning a new void
+   pointer for the new object.
+
+   For example, `LDKSocketDescriptor` is mapped as follows:
+   ```
+   typedef struct LDKSocketDescriptor {
+      void *this_arg;
+      /** ... */
+      uintptr_t (*send_data)(void *this_arg, LDKu8slice data, bool resume_read);
+      /** ... */
+      void (*disconnect_socket)(void *this_arg);
+      bool (*eq)(const void *this_arg, const void *other_arg);
+      uint64_t (*hash)(const void *this_arg);
+      void *(*clone)(const void *this_arg);
+      void (*free)(void *this_arg);
+   } LDKSocketDescriptor;
+   ```
+
  * Rust structs that implement a trait result in the generation of an `X_as_Y` function which allows
    you to use the native Rust object in place of the trait. Such generated objects are only valid as
-   long as the original Rust native object is owned by a C-wrapped struct, and has not been free'd
+   long as the original Rust native object is owned by a C-wrapped struct, and has not been `free`'d
    or moved as a part of a Rust function call.
 
  * Rust "unitary" enums are mapped simply as an equivalent C enum, however some Rust enums have
@@ -52,6 +81,14 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    object is owned or only a reference, and the object's corresponding free function will Do The
    Right Thing based on the flag. In order to determine the expected return type, you should
    reference the Rust documentation for the function.
+
+   Similarly, when a function takes an `Option<RustType>` as a parameter or a return value, the C
+   type is the same as if it took only `RustType`, with the `inner` field set to NULL to indicate
+   None. For example, `ChannelManager_create_channel` takes an `Option<LDKUserCOnfig>` not an
+   `LDKUserConfig`, but its definition is:
+   ```
+   MUST_USE_RES LDKCResult_NoneAPIErrorZ ChannelManager_create_channel(const LDKChannelManager *this_arg, ..., LDKUserConfig override_config);
+   ```
 
 As the bindings are auto-generated, the best resource for documentation on them is the native Rust
 docs available via `cargo doc` or [docs.rs/lightning](https://docs.rs/lightning).

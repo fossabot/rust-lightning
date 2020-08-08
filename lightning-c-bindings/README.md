@@ -23,6 +23,10 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    You MUST NOT create such wrapper structs manually, relying instead on constructors which have
    been mapped from equivalent Rust constructors.
 
+   Note that, thanks to the is-reference flag, such structs effectively represent both `&RustThing`
+   and `RustThing`. Further, the same applies to `Option<RustThing>`, in which cases `inner` may be
+   set to NULL.
+
    For example, this is the mapping of ChannelManager.
    ```
    typedef struct MUST_USE_STRUCT LDKChannelManager {

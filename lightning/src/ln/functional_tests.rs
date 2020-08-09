@@ -7874,15 +7874,18 @@ fn test_bump_penalty_txn_on_revoked_htlcs() {
 	let penalty_txn;
 	{
 		let mut node_txn = nodes[0].tx_broadcaster.txn_broadcasted.lock().unwrap();
-		assert_eq!(node_txn.len(), 5); // 3 penalty txn on revoked commitment tx + A commitment tx + 1 penalty tnx on revoked HTLC txn
+		for tx in node_txn.iter() {
+			eprintln!("{:#?}", tx);
+		}
+		assert_eq!(node_txn.len(), 4); // 3 penalty txn on revoked commitment tx + A commitment tx + 1 penalty tnx on revoked HTLC txn
 		// Verify claim tx are spending revoked HTLC txn
-		assert_eq!(node_txn[3].input.len(), 2);
-		assert_eq!(node_txn[3].output.len(), 1);
-		check_spends!(node_txn[3], revoked_htlc_txn[0], revoked_htlc_txn[1]);
-		first = node_txn[3].txid();
+		assert_eq!(node_txn[2].input.len(), 3);
+		assert_eq!(node_txn[2].output.len(), 1);
+		check_spends!(node_txn[2], revoked_htlc_txn[0], revoked_htlc_txn[1]);
+		first = node_txn[2].txid();
 		// Store both feerates for later comparison
-		let fee_1 = revoked_htlc_txn[0].output[0].value + revoked_htlc_txn[1].output[0].value - node_txn[3].output[0].value;
-		feerate_1 = fee_1 * 1000 / node_txn[3].get_weight() as u64;
+		let fee_1 = revoked_htlc_txn[0].output[0].value + revoked_htlc_txn[1].output[0].value - node_txn[2].output[0].value;
+		feerate_1 = fee_1 * 1000 / node_txn[2].get_weight() as u64;
 		penalty_txn = vec![node_txn[0].clone(), node_txn[1].clone(), node_txn[2].clone()];
 		node_txn.clear();
 	}

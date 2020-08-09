@@ -62,6 +62,7 @@ pub struct Transaction {
 }
 impl Transaction {
 	pub(crate) fn into_bitcoin(&self) -> BitcoinTransaction {
+		// datalen == 0 is invalid, so don't bother checking here.
 		::bitcoin::consensus::encode::deserialize(unsafe { std::slice::from_raw_parts(self.data, self.datalen) }).unwrap()
 	}
 	pub(crate) fn from_slice(s: &[u8]) -> Self {
@@ -111,6 +112,7 @@ impl u8slice {
 		}
 	}
 	pub(crate) fn to_slice(&self) -> &[u8] {
+		if self.datalen == 0 { return &[]; }
 		unsafe { std::slice::from_raw_parts(self.data, self.datalen) }
 	}
 }
@@ -128,6 +130,7 @@ impl usizeslice {
 		}
 	}
 	pub(crate) fn to_slice(&self) -> &[usize] {
+		if self.datalen == 0 { return &[]; }
 		unsafe { std::slice::from_raw_parts(self.data, self.datalen) }
 	}
 }
@@ -191,6 +194,7 @@ impl Into<Str> for &'static str {
 }
 impl Into<&'static str> for Str {
 	fn into(self) -> &'static str {
+		if self.len == 0 { return ""; }
 		std::str::from_utf8(unsafe { std::slice::from_raw_parts(self.chars, self.len) }).unwrap()
 	}
 }
@@ -198,15 +202,29 @@ impl Into<&'static str> for Str {
 // Note that the C++ headers memset(0) all the Templ types to avoid deallocation!
 // Thus, they must gracefully handle being completely null in _free.
 
+/// CSliceTempl may have the word slice in it, but its really a Vec. Because its used for things
+/// that require per-item conversion, we have to use a new buffer for it. Of course for opaque
+/// types, each item will simply be a pointer to the original slice's corresponding item, so we may
+/// not own the actual Rust item, only the buffer.
+///
+/// Thus, the implementation here is basically just that of CVecTempl.
 #[repr(C)]
 pub struct CSliceTempl<T> {
 	pub data: *mut T,
 	pub datalen: usize
 }
-// Things derived from CSliceTempl require per-item conversion, so is actually a Box<[]> underneath
-// (thus requires a Drop impl)
+impl<T> CSliceTempl<T> {
+	pub(crate) fn into_rust_vec(mut self) -> Vec<T> {
+		if self.datalen == 0 { return Vec::new(); }
+		let ret = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(self.data, self.datalen)) }.into();
+		self.data = std::ptr::null_mut();
+		self.datalen = 0;
+		ret
+	}
+}
 impl<T> Drop for CSliceTempl<T> {
 	fn drop(&mut self) {
+		if self.datalen == 0 { return; }
 		unsafe { Box::from_raw(std::slice::from_raw_parts_mut(self.data, self.datalen)) };
 	}
 }
@@ -262,6 +280,7 @@ pub struct CVecTempl<T> {
 }
 impl<T> CVecTempl<T> {
 	pub(crate) fn into_rust(mut self) -> Vec<T> {
+		if self.datalen == 0 { return Vec::new(); }
 		let ret = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(self.data, self.datalen)) }.into();
 		self.data = std::ptr::null_mut();
 		self.datalen = 0;
@@ -278,14 +297,14 @@ impl<T> From<Vec<T>> for CVecTempl<T> {
 pub extern "C" fn CVecTempl_free<T>(_res: CVecTempl<T>) { }
 impl<T> Drop for CVecTempl<T> {
 	fn drop(&mut self) {
-		// datalen == 0 is will gracefully be ignored, so we don't have to handle data == null
-		// here.
+		if self.datalen == 0 { return; }
 		unsafe { Box::from_raw(std::slice::from_raw_parts_mut(self.data, self.datalen)) };
 	}
 }
 impl<T: Clone> Clone for CVecTempl<T> {
 	fn clone(&self) -> Self {
 		let mut res = Vec::new();
+		if self.datalen == 0 { return Self::from(res); }
 		res.clone_from_slice(unsafe { std::slice::from_raw_parts_mut(self.data, self.datalen) });
 		Self::from(res)
 	}

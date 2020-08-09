@@ -46,7 +46,7 @@ fn convert_macro<W: std::io::Write>(w: &mut W, macro_path: &syn::Path, stream: &
 				writeln!(w, "\tif let Ok(res) = crate::c_types::deserialize_obj(ser) {{").unwrap();
 				writeln!(w, "\t\t{} {{ inner: Box::into_raw(Box::new(res)), _underlying_ref: false }}", struct_for).unwrap();
 				writeln!(w, "\t}} else {{").unwrap();
-				writeln!(w, "\t\t{} {{ inner: std::ptr::null(), _underlying_ref: false }}", struct_for).unwrap();
+				writeln!(w, "\t\t{} {{ inner: std::ptr::null_mut(), _underlying_ref: false }}", struct_for).unwrap();
 				writeln!(w, "\t}}\n}}").unwrap();
 			}
 		},
@@ -72,7 +72,7 @@ fn maybe_convert_trait_impl<W: std::io::Write>(w: &mut W, trait_path: &syn::Path
 				writeln!(w, "\tif let Ok(res) = crate::c_types::deserialize_obj(ser) {{").unwrap();
 				writeln!(w, "\t\t{} {{ inner: Box::into_raw(Box::new(res)), _underlying_ref: false }}", for_obj).unwrap();
 				writeln!(w, "\t}} else {{").unwrap();
-				writeln!(w, "\t\t{} {{ inner: std::ptr::null(), _underlying_ref: false }}", for_obj).unwrap();
+				writeln!(w, "\t\t{} {{ inner: std::ptr::null_mut(), _underlying_ref: false }}", for_obj).unwrap();
 				writeln!(w, "\t}}\n}}").unwrap();
 			},
 			_ => {},
@@ -399,7 +399,7 @@ fn writeln_opaque<W: std::io::Write>(w: &mut W, ident: &syn::Ident, struct_name:
 	writeln_docs(w, &attrs, "");
 	writeln!(w, "#[must_use]\n#[repr(C)]\npub struct {} {{\n\t/// Nearly everyhwere, inner must be non-null, however in places where", struct_name).unwrap();
 	writeln!(w, "\t/// the Rust equivalent takes an Option, it may be set to null to indicate None.").unwrap();
-	writeln!(w, "\tpub inner: *const ln{},\n\tpub _underlying_ref: bool,\n}}\n", ident).unwrap();
+	writeln!(w, "\tpub inner: *mut ln{},\n\tpub _underlying_ref: bool,\n}}\n", ident).unwrap();
 	writeln!(w, "impl Drop for {} {{\n\tfn drop(&mut self) {{", struct_name).unwrap();
 	writeln!(w, "\t\tif !self._underlying_ref && !self.inner.is_null() {{").unwrap();
 	writeln!(w, "\t\t\tlet _ = unsafe {{ Box::from_raw(self.inner as *mut ln{}) }};\n\t\t}}\n\t}}\n}}", struct_name).unwrap();
@@ -486,7 +486,7 @@ fn writeln_struct<'a, 'b, W: std::io::Write>(w: &mut W, s: &'a syn::ItemStruct, 
 						writeln_docs(w, &field.attrs, "");
 						write!(w, "#[no_mangle]\npub extern \"C\" fn {}_get_{}(this_ptr: &{}) -> ", struct_name, ident, struct_name).unwrap();
 						types.write_c_type(w, &ref_type, Some(&gen_types), true);
-						write!(w, " {{\n\tlet inner_val = &unsafe {{ &*this_ptr.inner }}.{};\n\t", ident).unwrap();
+						write!(w, " {{\n\tlet mut inner_val = &mut unsafe {{ &mut *this_ptr.inner }}.{};\n\t", ident).unwrap();
 						let local_var = types.write_to_c_conversion_new_var(w, &syn::Ident::new("inner_val", Span::call_site()), &ref_type, Some(&gen_types), true);
 						if local_var { write!(w, "\n\t").unwrap(); }
 						types.write_to_c_conversion_inline_prefix(w, &ref_type, Some(&gen_types), true);
@@ -506,7 +506,7 @@ fn writeln_struct<'a, 'b, W: std::io::Write>(w: &mut W, s: &'a syn::ItemStruct, 
 						write!(w, ") {{\n\t").unwrap();
 						let local_var = types.write_from_c_conversion_new_var(w, &syn::Ident::new("val", Span::call_site()), &field.ty, Some(&gen_types));
 						if local_var { write!(w, "\n\t").unwrap(); }
-						write!(w, "unsafe {{ &mut *(this_ptr.inner as *mut ln{}) }}.{} = ", s.ident, ident).unwrap();
+						write!(w, "unsafe {{ &mut *this_ptr.inner }}.{} = ", ident).unwrap();
 						types.write_from_c_conversion_prefix(w, &field.ty, Some(&gen_types));
 						write!(w, "val").unwrap();
 						types.write_from_c_conversion_suffix(w, &field.ty, Some(&gen_types));

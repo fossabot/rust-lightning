@@ -573,8 +573,8 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			"util::logger::Record" => Some("local_"),
 
 			// List of structs we map (possibly during processing of other files):
-			"ln::features::InitFeatures" if is_ref && ptr_for_ref => Some("crate::ln::features::InitFeatures { inner: &"),
-			"ln::features::InitFeatures" if is_ref => Some("Box::into_raw(Box::new(crate::ln::features::InitFeatures { inner: &"),
+			"ln::features::InitFeatures" if is_ref && ptr_for_ref => Some("crate::ln::features::InitFeatures { inner: &mut "),
+			"ln::features::InitFeatures" if is_ref => Some("Box::into_raw(Box::new(crate::ln::features::InitFeatures { inner: &mut "),
 			"ln::features::InitFeatures" if !is_ref => Some("crate::ln::features::InitFeatures { inner: Box::into_raw(Box::new("),
 
 			_ => {
@@ -696,7 +696,9 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				if let Some(syn::Type::Path(p)) = single_contained {
 					if self.c_type_has_inner_from_path(&self.resolve_path(&p.path)) {
 						if is_ref {
-							return Some(("match &", vec![("{ None => std::ptr::null(), Some(ref e) => ".to_string(), "e".to_owned())], " }"));
+							return Some(("if ", vec![
+								(".is_none() { std::ptr::null() } else { ".to_owned(), format!("({}.as_ref().unwrap())", var_access))
+								], " }"));
 						} else {
 							return Some(("if ", vec![
 								(".is_none() { std::ptr::null_mut() } else { ".to_owned(), format!("({}.unwrap())", var_access))
@@ -1001,7 +1003,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			syn::Type::Path(p) => {
 				let resolved = self.resolve_path(&p.path);
 				if self.crate_types.opaques.get(&resolved).is_some() {
-					write!(w, "crate::{} {{ inner: std::ptr::null(), _underlying_ref: false }}", resolved).unwrap();
+					write!(w, "crate::{} {{ inner: std::ptr::null_mut(), _underlying_ref: false }}", resolved).unwrap();
 				} else {
 					// Assume its a manually-mapped C type, where we can just define an empty() fn
 					write!(w, "{}::empty()", self.c_type_from_path(&resolved, false, false).unwrap()).unwrap();
@@ -1226,11 +1228,11 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 						DeclType::MirroredEnum if is_ref => write!(w, "&crate::{}::from_ln(&", decl_path).unwrap(),
 						DeclType::MirroredEnum => write!(w, "crate::{}::ln_into(", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if is_ref && ptr_for_ref && from_ptr =>
-							write!(w, "crate::{} {{ inner: ", decl_path).unwrap(),
+							write!(w, "crate::{} {{ inner: unsafe {{ (", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if is_ref && ptr_for_ref =>
-							write!(w, "crate::{} {{ inner: &", decl_path).unwrap(),
+							write!(w, "crate::{} {{ inner: unsafe {{ ( (&(", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if is_ref =>
-							write!(w, "&crate::{} {{ inner: ", decl_path).unwrap(),
+							write!(w, "&crate::{} {{ inner: unsafe {{ (", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if !is_ref && from_ptr =>
 							write!(w, "crate::{} {{ inner: ", decl_path).unwrap(),
 						DeclType::EnumIgnored|DeclType::StructImported if !is_ref =>
@@ -1248,9 +1250,14 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				|a, b, c| self.to_c_conversion_inline_suffix_from_path(a, b, c),
 				|w, decl_type, _full_path, is_ref| match decl_type {
 					DeclType::MirroredEnum => write!(w, ")").unwrap(),
-					DeclType::EnumIgnored|DeclType::StructImported if is_ref && ptr_for_ref => write!(w, ", _underlying_ref: true }}").unwrap(),
-					DeclType::EnumIgnored|DeclType::StructImported if is_ref => write!(w, ", _underlying_ref: true }}").unwrap(),
-					DeclType::EnumIgnored|DeclType::StructImported if !is_ref && from_ptr => write!(w, ", _underlying_ref: false }}").unwrap(),
+					DeclType::EnumIgnored|DeclType::StructImported if is_ref && ptr_for_ref && from_ptr =>
+						write!(w, " as *const _) as *mut _ }}, _underlying_ref: true }}").unwrap(),
+					DeclType::EnumIgnored|DeclType::StructImported if is_ref && ptr_for_ref =>
+						write!(w, ") as *const _) as *mut _) }}, _underlying_ref: true }}").unwrap(),
+					DeclType::EnumIgnored|DeclType::StructImported if is_ref =>
+						write!(w, " as *const _) as *mut _ }}, _underlying_ref: true }}").unwrap(),
+					DeclType::EnumIgnored|DeclType::StructImported if !is_ref && from_ptr =>
+						write!(w, ", _underlying_ref: false }}").unwrap(),
 					DeclType::EnumIgnored|DeclType::StructImported if !is_ref => write!(w, ")), _underlying_ref: false }}").unwrap(),
 					DeclType::Trait(_) if is_ref => {},
 					_ => unimplemented!(),
@@ -1265,7 +1272,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				|a, b, _c| self.from_c_conversion_prefix_from_path(a, b),
 				|w, decl_type, _full_path, is_ref| match decl_type {
 					DeclType::StructImported if is_ref && ptr_for_ref => write!(w, "unsafe {{ &*(*").unwrap(),
-					DeclType::StructImported if is_ref => write!(w, "unsafe {{ &*").unwrap(),
+					DeclType::StructImported if is_ref => write!(w, "unsafe {{ &mut *").unwrap(),
 					DeclType::StructImported if !is_ref => write!(w, "*unsafe {{ Box::from_raw(").unwrap(),
 					DeclType::MirroredEnum if is_ref => write!(w, "&").unwrap(),
 					DeclType::MirroredEnum => {},
@@ -1350,7 +1357,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 					if let Some(resolved) = gen_types.maybe_resolve_path(&p.path) {
 						assert!(!self.is_known_container(&resolved.0, is_ref) && !self.is_transparent_container(&resolved.0, is_ref));
 						if let Some((prefix, suffix)) = path_lookup(&resolved.0, is_ref) {
-							write!(w, "let local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
+							write!(w, "let mut local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
 							return true;
 						} else { return false; }
 					}
@@ -1440,7 +1447,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 					false
 				} else if let Some(ty_ident) = single_ident_generic_path_to_ident(&p.path) {
 					if let Some((prefix, suffix)) = path_lookup(&resolved_path, is_ref) {
-						write!(w, "let local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
+						write!(w, "let mut local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
 						true
 					} else if self.declared.get(ty_ident).is_some() {
 						false
@@ -1458,15 +1465,15 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 					assert!(self.is_primitive(&resolved));
 					let slice_path = format!("[{}]", resolved);
 					if let Some((prefix, suffix)) = path_lookup(&slice_path, true) {
-						write!(w, "let local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
+						write!(w, "let mut local_{} = {}{}{};", ident, prefix, var, suffix).unwrap();
 						true
 					} else { false }
 				} else if let syn::Type::Reference(_) = &*s.elem {
 					if !to_c {
 						if is_ref {
-							write!(w, "let local_{} = unsafe {{ (*{}).as_vec() }};", ident, var).unwrap();
+							write!(w, "let mut local_{} = unsafe {{ (*{}).as_vec() }};", ident, var).unwrap();
 						} else {
-							write!(w, "let local_{} = {}.into_vec();", ident, var).unwrap();
+							write!(w, "let mut local_{} = {}.into_vec();", ident, var).unwrap();
 						}
 						true
 					} else { false }
@@ -1491,7 +1498,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 							}
 						}
 					}
-					write!(w, "let local_{} = (", ident).unwrap();
+					write!(w, "let mut local_{} = (", ident).unwrap();
 					for (idx, elem) in t.elems.iter().enumerate() {
 						if idx != 0 { write!(w, ", ").unwrap(); }
 						var_prefix(w, elem, generics, is_ref, ptr_for_ref, false);
@@ -1583,7 +1590,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			writeln!(w, "\t\tlet mut v = Vec::with_capacity(slice.len());").unwrap();
 			writeln!(w, "\t\tfor e in slice.iter() {{").unwrap();
 			if has_inner {
-				writeln!(w, "\t\t\tv.push(crate::{} {{ inner: *e, _underlying_ref: true }});", resolved_path).unwrap();
+				writeln!(w, "\t\t\tv.push(crate::{} {{ inner: unsafe {{ ((*e) as *const _) as *mut _ }}, _underlying_ref: true }});", resolved_path).unwrap();
 			} else {
 				write!(w, "\t\t\t").unwrap();
 				let new_var = self.write_to_c_conversion_new_var_inner(w, &syn::Ident::new("e", Span::call_site()), "**e", inner_type, None, false);
@@ -1610,7 +1617,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			self.write_template_generics(w, &mut args.iter().map(|t| *t), is_ref, false);
 			writeln!(w, "> {{").unwrap();
 			writeln!(w, "\t\tlet mut ret = Vec::new();").unwrap();
-			writeln!(w, "\t\tlet mut orig: Vec<_> = unsafe {{ Box::from_raw(std::slice::from_raw_parts_mut(self.data, self.datalen)) }}.into();").unwrap();
+			writeln!(w, "\t\tlet mut orig: Vec<_> = self.into_rust_vec();").unwrap();
 			writeln!(w, "\t\tfor e in orig.drain(..) {{").unwrap();
 			if has_inner {
 				writeln!(w, "\t\t\tret.push(unsafe {{ &*e.inner }});").unwrap();
@@ -1626,8 +1633,6 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				writeln!(w, ");").unwrap();
 			}
 			writeln!(w, "\t\t}}").unwrap();
-			writeln!(w, "\t\t// Make sure we don't try to de-allocate the things we just drain(..)ed").unwrap();
-			writeln!(w, "\t\tself.data = std::ptr::null_mut(); self.datalen = 0;").unwrap();
 			writeln!(w, "\t\tret\n\t}}").unwrap();
 
 			if has_inner {

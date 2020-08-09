@@ -1135,9 +1135,6 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			 tupleconv: &str, prefix: bool, sliceconv: SC, path_lookup: LP, decl_lookup: DL) {
 		match t {
 			syn::Type::Reference(r) => {
-				if let Some(lft) = &r.lifetime {
-					if format!("{}", lft.ident) != "static" { unimplemented!(); }
-				}
 				self.write_conversion_inline_intern(w, &*r.elem, generics, true, ptr_for_ref, tupleconv, prefix, sliceconv, path_lookup, decl_lookup);
 			},
 			syn::Type::Path(p) => {
@@ -1340,9 +1337,6 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 			 path_lookup: &LP, container_lookup: &LC, var_prefix: &VP, var_suffix: &VS) -> bool {
 		match t {
 			syn::Type::Reference(r) => {
-				if let Some(lft) = &r.lifetime {
-					if format!("{}", lft.ident) != "static" { unimplemented!(); }
-				}
 				if let syn::Type::Slice(_) = &*r.elem {
 					self.write_conversion_new_var_intern(w, ident, var, &*r.elem, generics, is_ref, ptr_for_ref, to_c, path_lookup, container_lookup, var_prefix, var_suffix)
 				} else {
@@ -1706,6 +1700,15 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				} else {
 					write!(w, "{}::{}", if in_crate { "crate" } else { self.orig_crate }, resolved_generic).unwrap();
 				}
+			} else if let syn::Type::Reference(r_arg) = t {
+				if let syn::Type::Path(p_arg) = &*r_arg.elem {
+					let resolved = self.resolve_path(&p_arg.path);
+					if let Some(id) = single_ident_generic_path_to_ident(&p_arg.path) {
+						if self.crate_types.opaques.get(&resolved).is_some() {
+							write!(w, "crate::{}", resolved).unwrap();
+						} else { unimplemented!(); }
+					} else { unimplemented!(); }
+				} else { unimplemented!(); }
 			} else if let syn::Type::Array(a_arg) = t {
 				if let syn::Type::Path(p_arg) = &*a_arg.elem {
 					let resolved = self.resolve_path(&p_arg.path);
@@ -1785,7 +1788,7 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 							self.write_c_mangled_container_path_intern(w2, Self::path_to_generic_args(&$p_arg.path),
 								&subtype, is_ref, is_mut, ptr_for_ref, true);
 						}
-					} else if let Some(id) = $p_arg.path.get_ident() {
+					} else if let Some(id) = single_ident_generic_path_to_ident(&$p_arg.path) {
 						write!(w, "{}", id).unwrap();
 						write!(mangled_type, "{}", id).unwrap();
 						if let Some(w2) = $extra_write as Option<&mut Vec<u8>> {

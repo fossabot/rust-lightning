@@ -3104,7 +3104,7 @@ impl<ChanSigner: ChannelKeys, M: Deref + Sync + Send, T: Deref + Sync + Send, K:
 						}
 					}
 				}
-				if channel.is_funding_initiated() && channel.channel_monitor().would_broadcast_at_height(height, &self.logger) {
+				if channel.is_funding_initiated() && channel.monitor_would_broadcast_at_height(height, &self.logger) {
 					if let Some(short_id) = channel.get_short_channel_id() {
 						short_to_id.remove(&short_id);
 					}

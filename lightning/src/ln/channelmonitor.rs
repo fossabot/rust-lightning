@@ -1993,7 +1993,26 @@ impl<ChanSigner: ChannelKeys> ChannelMonitor<ChanSigner> {
 		self.last_block_hash = block_hash.clone();
 	}
 
-	pub(super) fn would_broadcast_at_height<L: Deref>(&self, height: u32, logger: &L) -> bool where L::Target: Logger {
+	fn would_broadcast_at_height<L: Deref>(&self, height: u32, logger: &L) -> bool where L::Target: Logger {
+		let local_outputs: Vec<&HTLCOutputInCommitment> = self.current_local_commitment_tx.htlc_outputs
+			.iter().map(|&(ref a, _, _)| a).collect();
+		let mut prev_remote_outputs = Vec::new();
+		if let Some(ref txid) = self.prev_remote_commitment_txid {
+			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
+				prev_remote_outputs = htlc_outputs.iter().map(|&(ref a, _)| a).collect();
+			}
+		}
+		let mut curr_remote_outputs = Vec::new();
+		if let Some(ref txid) = self.current_remote_commitment_txid {
+			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
+				curr_remote_outputs = htlc_outputs.iter().map(|&(ref a, _)| a).collect()
+			}
+		}
+		let remote_outputs = [curr_remote_outputs, prev_remote_outputs].concat();
+		ChannelMonitor::<ChanSigner>::would_broadcast_at_height_given_htlcs(local_outputs, remote_outputs, height, &self.payment_preimages, logger)
+	}
+
+	pub(super) fn would_broadcast_at_height_given_htlcs<L: Deref>(local_htlc_outputs: Vec<&HTLCOutputInCommitment>, remote_htlc_outputs: Vec<&HTLCOutputInCommitment>, height: u32, preimages: &HashMap<PaymentHash, PaymentPreimage>, logger: &L) -> bool where L::Target: Logger {
 		// We need to consider all HTLCs which are:
 		//  * in any unrevoked remote commitment transaction, as they could broadcast said
 		//    transactions and we'd end up in a race, or
@@ -2032,7 +2051,7 @@ impl<ChanSigner: ChannelKeys> ChannelMonitor<ChanSigner> {
 					//  with CHECK_CLTV_EXPIRY_SANITY_2.
 					let htlc_outbound = $local_tx == htlc.offered;
 					if ( htlc_outbound && htlc.cltv_expiry + LATENCY_GRACE_PERIOD_BLOCKS <= height) ||
-					   (!htlc_outbound && htlc.cltv_expiry <= height + CLTV_CLAIM_BUFFER && self.payment_preimages.contains_key(&htlc.payment_hash)) {
+					   (!htlc_outbound && htlc.cltv_expiry <= height + CLTV_CLAIM_BUFFER && preimages.contains_key(&htlc.payment_hash)) {
 						log_info!(logger, "Force-closing channel due to {} HTLC timeout, HTLC expiry is {}", if htlc_outbound { "outbound" } else { "inbound "}, htlc.cltv_expiry);
 						return true;
 					}
@@ -2040,18 +2059,8 @@ impl<ChanSigner: ChannelKeys> ChannelMonitor<ChanSigner> {
 			}
 		}
 
-		scan_commitment!(self.current_local_commitment_tx.htlc_outputs.iter().map(|&(ref a, _, _)| a), true);
-
-		if let Some(ref txid) = self.current_remote_commitment_txid {
-			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
-				scan_commitment!(htlc_outputs.iter().map(|&(ref a, _)| a), false);
-			}
-		}
-		if let Some(ref txid) = self.prev_remote_commitment_txid {
-			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
-				scan_commitment!(htlc_outputs.iter().map(|&(ref a, _)| a), false);
-			}
-		}
+		scan_commitment!(local_htlc_outputs, true);
+		scan_commitment!(remote_htlc_outputs, false);
 
 		false
 	}

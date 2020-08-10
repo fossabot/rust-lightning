@@ -7881,10 +7881,9 @@ fn test_bump_penalty_txn_on_revoked_htlcs() {
 		// Verify claim tx are spending revoked HTLC txn
 		assert_eq!(node_txn[2].input.len(), 3);
 		assert_eq!(node_txn[2].output.len(), 1);
-		check_spends!(node_txn[2], revoked_htlc_txn[0], revoked_htlc_txn[1]);
+		let fee_1 = check_spends!(node_txn[2], revoked_local_txn[0], revoked_htlc_txn[0], revoked_htlc_txn[1]);
 		first = node_txn[2].txid();
 		// Store both feerates for later comparison
-		let fee_1 = revoked_htlc_txn[0].output[0].value + revoked_htlc_txn[1].output[0].value - node_txn[2].output[0].value;
 		feerate_1 = fee_1 * 1000 / node_txn[2].get_weight() as u64;
 		penalty_txn = vec![node_txn[0].clone(), node_txn[1].clone(), node_txn[2].clone()];
 		node_txn.clear();

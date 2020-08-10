@@ -203,9 +203,9 @@ impl Into<&'static str> for Str {
 // Thus, they must gracefully handle being completely null in _free.
 
 /// CSliceTempl may have the word slice in it, but its really a Vec. Because its used for things
-/// that require per-item conversion, we have to use a new buffer for it. Of course for opaque
+/// that require per-item conversion, we have to use fresh memory for it. Of course for opaque
 /// types, each item will simply be a pointer to the original slice's corresponding item, so we may
-/// not own the actual Rust item, only the buffer.
+/// not own the actual Rust object, only the memory pointed to by data.
 ///
 /// Thus, the implementation here is basically just that of CVecTempl.
 #[repr(C)]

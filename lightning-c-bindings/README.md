@@ -31,7 +31,7 @@ All of the Rust-Lightning types are mapped into C equivalents which take a few f
    ```
    typedef struct MUST_USE_STRUCT LDKChannelManager {
       /** ... */
-      const LDKlnChannelManager *inner;
+      LDKlnChannelManager *inner;
       bool _underlying_ref;
    } LDKChannelManager;
    ```

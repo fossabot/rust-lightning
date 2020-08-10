@@ -62,7 +62,7 @@ pub struct Transaction {
 }
 impl Transaction {
 	pub(crate) fn into_bitcoin(&self) -> BitcoinTransaction {
-		// datalen == 0 is invalid, so don't bother checking here.
+		if self.datalen == 0 { panic!("0-length buffer can never represent a valid Transaction"); }
 		::bitcoin::consensus::encode::deserialize(unsafe { std::slice::from_raw_parts(self.data, self.datalen) }).unwrap()
 	}
 	pub(crate) fn from_slice(s: &[u8]) -> Self {

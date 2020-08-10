@@ -21,7 +21,7 @@ impl PublicKey {
 		SecpPublicKey::from_slice(&self.compressed_form).unwrap()
 	}
 	pub(crate) fn is_null(&self) -> bool { self.compressed_form[..] == [0; 33][..] }
-	pub(crate) fn empty() -> Self { Self { compressed_form: [0; 33] } }
+	pub(crate) fn null() -> Self { Self { compressed_form: [0; 33] } }
 }
 
 #[repr(C)]
@@ -49,7 +49,7 @@ impl Signature {
 		SecpSignature::from_compact(&self.compact_form).unwrap()
 	}
 	pub(crate) fn is_null(&self) -> bool { self.compact_form[..] == [0; 64][..] }
-	pub(crate) fn empty() -> Self { Self { compact_form: [0; 64] } }
+	pub(crate) fn null() -> Self { Self { compact_form: [0; 64] } }
 }
 
 #[repr(C)]
@@ -143,7 +143,7 @@ pub struct ThirtyTwoBytes {
 	pub data: [u8; 32],
 }
 impl ThirtyTwoBytes {
-	pub(crate) fn empty() -> Self {
+	pub(crate) fn null() -> Self {
 		Self { data: [0; 32] }
 	}
 }

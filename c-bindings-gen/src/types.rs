@@ -1005,8 +1005,8 @@ impl<'a, 'c: 'a> TypeResolver<'a, 'c> {
 				if self.crate_types.opaques.get(&resolved).is_some() {
 					write!(w, "crate::{} {{ inner: std::ptr::null_mut(), _underlying_ref: false }}", resolved).unwrap();
 				} else {
-					// Assume its a manually-mapped C type, where we can just define an empty() fn
-					write!(w, "{}::empty()", self.c_type_from_path(&resolved, false, false).unwrap()).unwrap();
+					// Assume its a manually-mapped C type, where we can just define an null() fn
+					write!(w, "{}::null()", self.c_type_from_path(&resolved, false, false).unwrap()).unwrap();
 				}
 			},
 			syn::Type::Array(a) => {

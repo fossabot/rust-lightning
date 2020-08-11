@@ -858,9 +858,8 @@ impl<ChanSigner: ChannelKeys> Channel<ChanSigner> {
 		}
 
 		let local_htlc_outputs = local_outputs.iter().collect();
-		let prev_remote_outputs = prev_remote_htlc_outputs.iter().collect();
-		let remote_outputs = [curr_remote_outputs, prev_remote_outputs].concat();
-		ChannelMonitor::<ChanSigner>::would_broadcast_at_height_given_htlcs(local_htlc_outputs, remote_outputs, height, &self.payment_preimages, logger)
+		let prev_remote_outputs = prev_remote_htlc_outputs.iter();
+		ChannelMonitor::<ChanSigner>::would_broadcast_at_height_given_htlcs(local_htlc_outputs, curr_remote_outputs.iter().map(|ref a| **a).chain(prev_remote_outputs), height, &self.payment_preimages, logger)
 	}
 
 	// Utilities to build transactions:

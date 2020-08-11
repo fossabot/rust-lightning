@@ -2006,23 +2006,27 @@ impl<ChanSigner: ChannelKeys> ChannelMonitor<ChanSigner> {
 	fn would_broadcast_at_height<L: Deref>(&self, height: u32, logger: &L) -> bool where L::Target: Logger {
 		let local_outputs: Vec<&HTLCOutputInCommitment> = self.current_local_commitment_tx.htlc_outputs
 			.iter().map(|&(ref a, _, _)| a).collect();
-		let mut prev_remote_outputs = Vec::new();
-		if let Some(ref txid) = self.prev_remote_commitment_txid {
+
+		let dummy_vec = Vec::new();
+		let map_fn = |&(ref a, _)| a;
+
+		let prev_remote_outputs = if let Some(ref txid) = self.prev_remote_commitment_txid {
 			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
-				prev_remote_outputs = htlc_outputs.iter().map(|&(ref a, _)| a).collect();
-			}
-		}
-		let mut curr_remote_outputs = Vec::new();
-		if let Some(ref txid) = self.current_remote_commitment_txid {
+				htlc_outputs.iter().map(map_fn)
+			} else { dummy_vec.iter().map(map_fn) }
+		} else { dummy_vec.iter().map(map_fn) };
+
+		let curr_remote_outputs = if let Some(ref txid) = self.current_remote_commitment_txid {
 			if let Some(ref htlc_outputs) = self.remote_claimable_outpoints.get(txid) {
-				curr_remote_outputs = htlc_outputs.iter().map(|&(ref a, _)| a).collect()
-			}
-		}
-		let remote_outputs = [curr_remote_outputs, prev_remote_outputs].concat();
-		ChannelMonitor::<ChanSigner>::would_broadcast_at_height_given_htlcs(local_outputs, remote_outputs, height, &self.payment_preimages, logger)
+				htlc_outputs.iter().map(map_fn)
+			} else { dummy_vec.iter().map(map_fn) }
+		} else { dummy_vec.iter().map(map_fn) };
+
+		ChannelMonitor::<ChanSigner>::would_broadcast_at_height_given_htlcs(local_outputs, curr_remote_outputs.chain(prev_remote_outputs), height, &self.payment_preimages, logger)
 	}
 
-	pub(super) fn would_broadcast_at_height_given_htlcs<L: Deref>(local_htlc_outputs: Vec<&HTLCOutputInCommitment>, remote_htlc_outputs: Vec<&HTLCOutputInCommitment>, height: u32, preimages: &HashMap<PaymentHash, PaymentPreimage>, logger: &L) -> bool where L::Target: Logger {
+	pub(super) fn would_broadcast_at_height_given_htlcs<'a, L: Deref, I1: Iterator<Item=&'a HTLCOutputInCommitment>>
+			(local_htlc_outputs: Vec<&HTLCOutputInCommitment>, remote_htlc_outputs: I1, height: u32, preimages: &HashMap<PaymentHash, PaymentPreimage>, logger: &L) -> bool where L::Target: Logger {
 		// We need to consider all HTLCs which are:
 		//  * in any unrevoked remote commitment transaction, as they could broadcast said
 		//    transactions and we'd end up in a race, or

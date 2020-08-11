@@ -292,6 +292,11 @@ impl<ChanSigner: ChannelKeys, T: Deref + Sync + Send, F: Deref + Sync + Send, L:
 		}
 	}
 
+	#[cfg(any(test, feature = "fuzztarget"))]
+	fn get_monitor_would_broadcast(&self, funding_txo: &OutPoint, height: u32) -> bool {
+		self.monitors.lock().unwrap().get(funding_txo).unwrap().would_broadcast_at_height(height, &self.logger)
+	}
+
 	fn get_and_clear_pending_htlcs_updated(&self) -> Vec<HTLCUpdate> {
 		let mut pending_htlcs_updated = Vec::new();
 		for chan in self.monitors.lock().unwrap().values_mut() {
@@ -876,6 +881,11 @@ pub trait ManyChannelMonitor: Send + Sync {
 	/// Any spends of outputs which should have been registered which aren't passed to
 	/// ChannelMonitors via block_connected may result in FUNDS LOSS.
 	fn update_monitor(&self, funding_txo: OutPoint, monitor: ChannelMonitorUpdate) -> Result<(), ChannelMonitorUpdateErr>;
+
+	#[cfg(any(test, feature = "fuzztarget"))]
+	/// Calls would_broadcast_at_height() on the given monitor. Used in testing to check that the
+	/// ChannelMonitor copy can never get out of sync with the Channel copy.
+	fn get_monitor_would_broadcast(&self, funding_txo: &OutPoint, height: u32) -> bool;
 
 	/// Used by ChannelManager to get list of HTLC resolved onchain and which needed to be updated
 	/// with success or failure.

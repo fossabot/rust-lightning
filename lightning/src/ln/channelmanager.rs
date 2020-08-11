@@ -3104,6 +3104,15 @@ impl<ChanSigner: ChannelKeys, M: Deref + Sync + Send, T: Deref + Sync + Send, K:
 						}
 					}
 				}
+				#[cfg(any(test, feature = "fuzztarget"))]
+				if channel.is_funding_initiated() {
+					// In testing/fuzzing, check that the channel's would_broadcast_at_height
+					// implementation is always identical to the ChannelMonitor equivalent.
+					for i in height..height + 144 {
+						assert_eq!(channel.monitor_would_broadcast_at_height(i, &self.logger),
+							self.monitor.get_monitor_would_broadcast(&channel.get_funding_txo().unwrap(), i));
+					}
+				}
 				if channel.is_funding_initiated() && channel.monitor_would_broadcast_at_height(height, &self.logger) {
 					if let Some(short_id) = channel.get_short_channel_id() {
 						short_to_id.remove(&short_id);

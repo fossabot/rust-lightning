@@ -129,6 +129,10 @@ impl<'a> channelmonitor::ManyChannelMonitor for TestChannelMonitor<'a> {
 		ret
 	}
 
+	fn get_monitor_would_broadcast(&self, funding_txo: &OutPoint, height: u32) -> bool {
+		self.simple_monitor.get_monitor_would_broadcast(funding_txo, height)
+	}
+
 	fn get_and_clear_pending_htlcs_updated(&self) -> Vec<HTLCUpdate> {
 		return self.simple_monitor.get_and_clear_pending_htlcs_updated();
 	}
